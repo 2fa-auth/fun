@@ -1,9 +1,11 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
-
 import random
 
 class Linear:
   def __init__(self, in_features: int, out_features: int):
+    """
+    вычисление линейного преобразования
+    """
     self.in_features = in_features
     self.out_features = out_features
     self.b = [random.randint(1, 3) for _ in range(out_features)]
