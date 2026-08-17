@@ -1,3 +1,4 @@
+#!/home/client/Documents/fun/py/venv/bin/python3
 """
 немного поиграться с основными правилами тензоров:
 1. broadcasting (и его правилами)
@@ -5,9 +6,6 @@
 3. inicing
 4. vectorization 
 """
-
-
-#!/home/client/Documents/fun/py/venv/bin/python3
 import numpy as np
 
 # правила BROADCASTING:
@@ -61,11 +59,7 @@ def main():
  
     # умножение каждого канала на соответствующий коэфициент:
     brightness = brightness.reshape(1, 3, 1, 1)
-    print((images * brightness))
-
-
-    #vectorization
-
+    z = images * brightness
 
 if __name__ == "__main__":
     main()    
