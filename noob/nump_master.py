@@ -32,9 +32,6 @@ def main():
 
     #axis:
     x = np.arange(24).reshape(2, 3, 4)
-    x.mean(axis=0)
-    x.mean(axis=1)
-    x.mean(axis=2)
     x.mean(axis=(1,2))
 
     #indicing
@@ -45,7 +42,8 @@ def main():
     print(x[:, 0].shape) # (2, 3, 4) - > (2, 4)
     print(x[:, :, 0].shape) # (2, 3, 4) - > (2, 3)
 
-    print(x[0, :, :].shape)
+    # *предугадай shape
+    print(x[0, :, :].shape) 
     print(x[0, 1, :].shape) 
     print(x[:, 1:3, :].shape)
     print(x[:, :, 1:3].shape)
@@ -67,7 +65,7 @@ def main():
 
 
     #vectorization
-    
+
 
 if __name__ == "__main__":
     main()    
