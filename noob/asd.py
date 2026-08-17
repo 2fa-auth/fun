@@ -27,6 +27,9 @@ def main():
     print(x.shape)
     
     x.mean(axis=0)
+    x.mean(axis=1)
+    x.mean(axis=2)
+    x.mean(axis=(1,2))
 
 if __name__ == "__main__":
     main()    
