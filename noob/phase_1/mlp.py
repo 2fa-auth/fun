@@ -1,7 +1,7 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 
 """
-реализация модели MLP
+реализация модели MLP (перцептрон)
 """
 import numpy as np
 
