@@ -16,7 +16,8 @@ def main():
   print(loss) # [0, 4, 1]
 
   target = 10
-  losses = {mse(pred, target): pred for pred in np.arange(0, 20, 0.5)} # поиск минимума
+  # поиск минимума, пока втупую; без градиента
+  losses = {mse(pred, target): pred for pred in np.arange(0, 20, 0.5)} 
   print(f'минимальный loss достигается при pred равному: {losses[min(losses)]}')
 
 if __name__ == "__main__":
