@@ -4,12 +4,10 @@ import numpy as np
 def train_step(x, target, p, learning_rate):
   # FORWARD
   y_pred = x @ p 
-
   loss = (y_pred - target) ** 2 # shape = (4,)
   # BACKWARD
   grad_p = (2/len(x)) * (y_pred - target) @ x # shape = (2)
   # UPDATE
-  
   p -= learning_rate * grad_p # shape = (2,)
 
   return p, loss
