@@ -3,10 +3,6 @@ import random
 
 class Linear:
   def __init__(self, in_features: int, out_features: int):
-    """
-    вычисление линейного преобразования:
-    y = Wx+b
-    """
     self.in_features = in_features
     self.out_features = out_features
     self.b = [random.randint(1, 3) for _ in range(out_features)]
