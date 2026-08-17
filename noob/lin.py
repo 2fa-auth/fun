@@ -4,15 +4,15 @@ import random
 class Linear:
   def __init__(self, in_features: int, out_features: int):
     """
-    вычисление линейного преобразования
+    вычисление линейного преобразования:
+    y = Wx+b
     """
     self.in_features = in_features
     self.out_features = out_features
     self.b = [random.randint(1, 3) for _ in range(out_features)]
     self.W = [ [random.randint(1, 6) for _ in range(out_features)] for _ in range(in_features)]
-
+    
   def __call__(self, x: list):
-    # yj​=i∑​xi​Wij​+bj
     if self.in_features != len(x):
       raise ValueError("невозможно привести к линейному преобразованию")
     y = []    
