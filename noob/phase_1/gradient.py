@@ -1,6 +1,8 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 import numpy as np
 
+""" forward ==> barkward ==> optimization ==> again ..."""
+
 class Linear:
   def __init__(self, in_features):
     self.p = np.random.randn(in_features)
@@ -15,7 +17,7 @@ class Linear:
 
     return grad_p, grad_b
 
-  def update(self, grad_p, grad_b, lr=0.01):
+  def optimization(self, grad_p, grad_b, lr=0.01):
     self.p -= lr * grad_p
     self.b -= lr * grad_b 
 
