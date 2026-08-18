@@ -1,29 +1,24 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 import numpy as np
 
+class Linear:
+  def __init__(self, in_features):
+    self.p = np.random.randn(in_features)
+    self.b = np.random.randn()
 
-def train_step(X, target, p, learning_rate):
-  """
-  функция вычисляет:
-    loss: L = (y-t)**2
-      производная: dL/dy = 2(y-t)
-    y: y = px
-      производная: dy/dp = x
-    backprop:
-      dL/dp = dL/dy * dy/dp
-    optimization:
-      p_new = p - lr * dL/dp 
-  """
+  def forward(self, X):
+    return X @ self.p + self.b
 
-  # FORWARD
-  y_pred = X @ p 
-  loss = (y_pred - target) ** 2 # shape = (4,)
-  # BACKWARD
-  grad_p = (2/len(X)) * (y_pred - target) @ X # shape = (2)
-  # UPDATE
-  p -= learning_rate * grad_p # shape = (2,)
+  def backward(self, grad_output, X):
+    grad_p = grad_output @ X
+    grad_b = grad_output.sum()
 
-  return p, loss
+    return grad_p, grad_b
+
+  def update(self, grad_p, grad_b, lr=0.01):
+    self.p -= lr * grad_p
+    self.b -= lr * grad_b 
+
 
 def main():
   X = np.array([
@@ -32,7 +27,6 @@ def main():
     [3., 1.],
     [5., 2.]
   ])
-  p = np.array([1., 2.])
 
   target = np.array([
     10.,
@@ -41,16 +35,19 @@ def main():
     13.
   ])
 
-  for step in range(100):
-    p, loss = train_step(
-    X, 
-    target,
-    p,
-    learning_rate=0.05
-  )
-  print(f'step = {step}')
-  print(f'p = {p}')
-  print(f'loss={loss}')
+  layer = Linear(2)
+
+  for step in range(1000):
+
+    y_pred = layer.forward(X)
+
+    loss = ((y_pred - target)**2).mean() 
+    grad_output = 2 * (y_pred - target) / len(X)
+    grad_p, grad_b = layer.backward(grad_output, X)
+    layer.update(grad_p, grad_b, 0.01)
+
+    if step % 100 == 0:
+      print(step, loss)
 
 if __name__ == '__main__':
   main()
