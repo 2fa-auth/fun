@@ -1,6 +1,8 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 import random
 
+""" нулевой уровень: линейное преобразование с нуля """
+
 class Linear:
   def __init__(self, in_features: int, out_features: int):
     self.in_features = in_features
@@ -10,18 +12,16 @@ class Linear:
     
   def __call__(self, x: list):
     if self.in_features != len(x):
-      raise ValueError("невозможно привести к линейному преобразованию")
+      raise ValueError(f"in features {self.in_featuresno} equal len of x {len(x)}")
     y = []    
     for index1 in range(self.out_features):
       list_sum = []
       for index2 in range(self.in_features):
         list_sum.append(x[index2] * self.W[index2][index1])
-
       y.append(sum(list_sum) + self.b[index1])                               
     return y      
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
   layer = Linear(3, 2)
   x = [1, 2, 3, 3]
 
