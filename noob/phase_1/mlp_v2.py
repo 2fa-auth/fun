@@ -28,8 +28,8 @@ class MLP:
     self.relu = ReLU()
     self.fc2 = Linear(3, 1)
     
-  def forward(self):
-    pass
+  def forward(self, X):
+    return X
 
   def backward(self):
     pass
@@ -62,7 +62,20 @@ def main():
   # после обучения предсказания должны быть близки к:
   # [0, 3, 2, 5, 7, 4, 6, 7]
 
-  model = MLP()
+  model = MLP() 
+  pred = model.forward(X)
+  print(f'pred.shape = {pred.shape}')
+  print(pred)
+
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
