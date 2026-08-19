@@ -27,14 +27,14 @@ class Linear:
 
 
 def main():
-  X = np.array([
+  X = np.array([ # shape = (4, 2)
     [2., 3.],
     [1., 4.],
     [3., 1.],
     [5., 2.]
   ])
 
-  target = np.array([
+  target = np.array([ # shape = (4, 3)
     [10., 5., 2.],
     [9.,  4., 3.],
     [7.,  8., 1.],
@@ -43,12 +43,17 @@ def main():
 
   layer = Linear(2,3)
 
-  for step in range(1000):
 
-    pred = layer.forward(X)
+  for step in range(1000):
+    pred = layer.forward(X) # shape = (4, 3)
 
     loss = ((pred - target)**2).mean() 
+
     grad_output = 2 * (pred - target) / len(X)
+    print(grad_output.shape)
+    print(grad_output)
+    exit(0)
+
     grad_p, grad_b = layer.backward(grad_output, X)
     layer.optimization(grad_p, grad_b, 0.01)
 
