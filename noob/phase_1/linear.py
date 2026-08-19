@@ -1,7 +1,11 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 import random
 
-""" нулевой уровень: линейное преобразование с нуля """
+""" 
+линейное преобразование 
+
+(вспомнить python :)
+"""
 
 class Linear:
   def __init__(self, in_features: int, out_features: int):

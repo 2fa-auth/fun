@@ -1,6 +1,11 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 import numpy as np
 
+"""
+архитектура модели MLP (с backpropogation)
+Версия 2
+"""
+
 
 class Linear:
   def __init__(self, in_features, out_features):
@@ -8,7 +13,7 @@ class Linear:
     self.b = np.zeros(out_features)
 
   def forward(self, X):
-    return X @ self.W + self.b
+    return X @ self.W + X @ self.W + self.b
 
   def backward(self, grad_output, X):
     # grad_output = dL/dY

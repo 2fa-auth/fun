@@ -1,5 +1,7 @@
 import numpy as np
 
+"""немного поучиться математике""" 
+
 def relu(z):
   return 0 if z < 0 else z
 

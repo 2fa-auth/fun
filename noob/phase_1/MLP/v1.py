@@ -1,7 +1,8 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 
 """
-реализация модели MLP (перцептрон)
+архитектура модели MLP (без backpropogation)
+Версия 1
 """
 import numpy as np
 
