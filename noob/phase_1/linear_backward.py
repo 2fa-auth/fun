@@ -23,9 +23,9 @@ def backward():
   grad_x = w                 # dz / dx
   grad_b = 1                 # dz / db
 
-  grad_x = grad_a * grad_z * grad_x # dL / dx
-  grad_W = grad_a * grad_z * grad_w # dL / dw
-  grad_bias = grad_a * grad_z * grad_b # dL / db
+  grad_x = grad_a * grad_z * grad_x # dL / dx = dL/da * da/dz * dz/dx
+  grad_W = grad_a * grad_z * grad_w # dL / dw = dL/da * da/dz * dz/dw
+  grad_bias = grad_a * grad_z * grad_b # dL / db = dL/da * da/dz * dz/db
 
   return grad_x, grad_W, grad_bias
 
@@ -34,30 +34,12 @@ print(grad_x, grad_W, grad_bias) # 42, 28, 14
 
 
 """
+relu
 grad_output:
-  dL/da = 2*a (LOL : ))
+  dL/da = 2*a
 
 grad_input:
-  dL/dz = dL/da * da/dz  
- 
-интуитивное понимание:
-  class relu:
-    def forward():
-      принимает число `z`
-      вычисляет `a` (action) и возвращает его (`a`)
-    def backward():
-      принимает градиент dL/da (от значения `a`)
-      вычисляет dL/dz и возвращает его (dL/dz) (`z`) 
-
-      
-костыль:
-class Relu:
-  def forward(self, X):
-    return np.maximum(X, 0) # если X меньше нуля -> 0 иначе X 
-
-  def backward(self, grad_output, X):
-    grad_input = grad_output * (X > 0)  
-    return grad_input
+  dL/dz = dL/da * da/dz        
 """
 
 
