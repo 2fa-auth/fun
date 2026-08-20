@@ -43,15 +43,22 @@ class ReLU:
 
 class SGD:
   def __init__(self, params, lr):
-    self.params = list(params)
+    self.params = params
     self.lr = lr
 
   def step(self):
-    if not self.params:
+    if self.params == ():
       return
-     
-    for num_fc in range(0,len(self.params), 2):
-      self.params[num_fc] -= self.lr * self.params[num_fc+1]
+      
+    print(f'params = \n{params}')
+      
+    exit(0)  
+    w1, grad_w1, b1, grad_b1, w2, grad_w2, b2, grad_b2 = self.params
+    
+    w1 -= self.lr * grad_w1
+    b1 -= self.lr * grad_b1
+    w2 -= self.lr * grad_w2
+    b2 -= self.lr * grad_b2
 
 class MLP:
   def __init__(self):
@@ -82,13 +89,14 @@ class MLP:
     self.grad_W2 = grad_W2
     self.grad_b2 = grad_b2
     
+    self.parameters((self.fc1.W, self.grad_W1, 
+                     self.fc1.b, self.grad_b1, 
+                     self.fc2.W, self.grad_W2, 
+                     self.fc2.b, self.grad_b2))
     return grad_W1, grad_b1, grad_W2, grad_b2
 
-  def parameters(self):
-    return (self.fc1.W, self.grad_W1,
-            self.fc1.b, self.grad_b1,
-            self.fc2.W, self.grad_W2,
-            self.fc2.b, self.grad_b2)
+  def parameters(self, grads=()):
+    return grads
 
 def main():
 
@@ -107,16 +115,16 @@ def main():
   ])
 
   model = MLP()
+  optim = SGD(model.parameters(), lr=0.01)
 
   for step in range(1000):
     pred = model.forward(X)
     loss = ((pred - target) ** 2).mean()
     grad_loss = 2 * (pred - target) / len(X)
     grads = model.backward(grad_loss, X)
-  
-    optim = SGD(model.parameters(), lr=0.01)
+ 
     optim.step()
-    
+    print("asdasdsad")
 
     if step % 100 == 0:
       print(f"step={step}, loss={loss:.6f}")
