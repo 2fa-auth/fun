@@ -6,28 +6,32 @@ import numpy as np
 Версия 2
 """
 
+class Parameter:
+  def __init__(self, data, grad):
+    self.data = data
+    self.grad = grad
 
 class Linear:
   def __init__(self, in_features, out_features):
-    self.W = np.random.randn(in_features, out_features) * 0.1
-    self.b = np.zeros(out_features)
+    self.W = Parameter(np.random.randn(in_features, out_features) * 0.1, np.zeros((in_features, out_features)))
+    self.b = Parameter(np.zeros(out_features), np.zeros((out_features)))
     self.X = []
-        
+
   def forward(self, X):
     self.X = X
-    return X @ self.W + self.b
+    return X @ self.W.data + self.b.data
 
   def backward(self, grad_output):
+    """
+    вычислить градиенты для dL/dw, dL/db, dL/dx
+    """
     # grad_output = dL/dY
     X = self.X
-    # dL/dW
-    grad_W = X.T @ grad_output
-    # dL/db
-    grad_b = grad_output.sum(axis=0)
-    # dL/dX
-    grad_X = grad_output @ self.W.T
+    self.W.grad = X.T @ grad_output # dL/dw = 2a * ... * X
+    self.b.grad = grad_output.sum(axis=0) 
+    grad_X = grad_output @ self.W.data.T # dL/dx = 2a * ... * W
  
-    return grad_X, grad_W, grad_b
+    return grad_X, self.W.grad, self.b.grad
 
 
 class ReLU:
@@ -43,15 +47,17 @@ class ReLU:
 
 class SGD:
   def __init__(self, params, lr):
-    self.params = list(params)
+    self.params = params
     self.lr = lr
 
   def step(self):
-    if not self.params:
-      return
-     
-    for num_fc in range(0,len(self.params), 2):
-      self.params[num_fc] -= self.lr * self.params[num_fc+1]
+    for parameter in self.params:
+      parameter.data -= self.lr * parameter.grad
+
+  def zero_grad(self):
+    for parameter in self.params:
+      parameter.grad.fill(0)
+
 
 class MLP:
   def __init__(self):
@@ -60,10 +66,10 @@ class MLP:
     self.fc2 = Linear(4, 1)
  
     # cache grads
-    self.grad_W1 = np.array([])
-    self.grad_b1 = np.array([])
-    self.grad_W2 = np.array([])
-    self.grad_b2 = np.array([])
+    self.grad_W1 = np.zeros(self.fc1.W.data.shape)
+    self.grad_b1 = np.zeros(self.fc1.b.data.shape)
+    self.grad_W2 = np.zeros(self.fc2.W.data.shape)
+    self.grad_b2 = np.zeros(self.fc2.b.data.shape)
   
   def forward(self, X):
     self.z1 = self.fc1.forward(X)
@@ -76,45 +82,42 @@ class MLP:
     grad_a1, grad_W2, grad_b2 = self.fc2.backward(grad_loss)
     grad_z1 = self.relu.backward(grad_a1, self.z1)
     _, grad_W1, grad_b1 = self.fc1.backward(grad_z1)
-  
-    self.grad_W1 = grad_W1
-    self.grad_b1 = grad_b1
-    self.grad_W2 = grad_W2
-    self.grad_b2 = grad_b2
     
+    self.grad_W1[...] = grad_W1
+    self.grad_b1[...] = grad_b1
+    self.grad_W2[...] = grad_W2
+    self.grad_b2[...] = grad_b2
+
     return grad_W1, grad_b1, grad_W2, grad_b2
 
   def parameters(self):
-    return (self.fc1.W, self.grad_W1,
-            self.fc1.b, self.grad_b1,
-            self.fc2.W, self.grad_W2,
-            self.fc2.b, self.grad_b2)
+    return [W_parameter, b_parameter, W_parameter, b_parameter]
 
 def main():
-
   X = np.array([
     [2., 3.],
     [1., 4.],
     [3., 1.],
     [5., 2.]
   ])
-
   target = np.array([
     [10.],
     [9.],
     [7.],
     [13.]
   ])
-
+  
   model = MLP()
+  optim = SGD(model.parameters(), lr=0.01)
 
   for step in range(1000):
     pred = model.forward(X)
     loss = ((pred - target) ** 2).mean()
     grad_loss = 2 * (pred - target) / len(X)
+
+    optim.zero_grad()
     grads = model.backward(grad_loss, X)
   
-    optim = SGD(model.parameters(), lr=0.01)
     optim.step()
     
 
