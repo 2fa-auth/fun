@@ -1,3 +1,12 @@
 **реализация базовых архитектур с нуля используя numpy и python3**
 
-![](image/jean_claude_van_damme.png)
+(на случай если прокурю мозги :)
+
+mse loss
+![mse](image/mse.png)
+
+optimization
+![...](image/optimization.png)
+
+backprop
+![..](image/backprop.png)
