@@ -126,7 +126,7 @@ def main():
 
     if _ep % 50 == 0:
       print(f'_ep = {_ep} | loss mean = {loss_mean}')
-c     
+     
   model.eval()
 
 
