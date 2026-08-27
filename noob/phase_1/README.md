@@ -3,10 +3,15 @@
 (на случай если прокурю мозги :)
 
 mse loss
+
 ![mse](image/mse.png)
 
+
 optimization
+
 ![...](image/optimization.png)
 
+
 backprop
+
 ![..](image/backprop.png)

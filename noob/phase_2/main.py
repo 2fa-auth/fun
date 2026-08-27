@@ -41,7 +41,6 @@ def gen_data(x, target, train_size):
   data_test = data.DataLoader(set_test, batch_size=16, shuffle=False)
   return (data_train, data_test)
 
-
 # === DROPOUT ===
 # class MLP(nn.Module):
 #   def __init__(self, out_features_x, out_features_y):
@@ -55,11 +54,35 @@ def gen_data(x, target, train_size):
 #     self.dropout = nn.Dropout(p=0.5)
 
 #   def forward(self, X):
-#     out = self.relu(self.fc1(X))
-#     out = self.relu(self.fc2(out))
-#     out = self.relu(self.fc3(out))
+#     out = self.dropout(self.relu(self.fc1(X)))
+#     out = self.dropout(self.relu(self.fc2(out)))
+#     out = self.dropout(self.relu(self.fc3(out)))
 #     out = self.fc4(out) 
 #     return out
+
+
+# === BATCH NORMALIZATION ===
+# class MLP(nn.Module):
+#   def __init__(self, out_features_x, out_features_y):
+#     super().__init__()
+
+#     self.fc1 = nn.Linear(out_features_x, 16)
+#     self.fc1_batchnorm = nn.BatchNorm1d(16)
+#     self.fc2 = nn.Linear(16, 8)
+#     self.fc2_batchnorm = nn.BatchNorm1d(8)
+#     self.fc3 = nn.Linear(8, 4)
+#     self.fc3_batchnorm = nn.BatchNorm1d(4)
+#     self.fc4 = nn.Linear(4, out_features_y)
+
+#     self.relu = nn.ReLU()
+
+#   def forward(self, X):
+#     out = self.relu(self.fc1_batchnorm(self.fc1(X)))
+#     out = self.relu(self.fc2_batchnorm(self.fc2(out)))
+#     out = self.relu(self.fc3_batchnorm(self.fc3(out)))
+#     out = self.fc4(out) 
+#     return out
+
 
 class MLP(nn.Module):
   def __init__(self, out_features_x, out_features_y):
@@ -70,25 +93,27 @@ class MLP(nn.Module):
     self.fc3 = nn.Linear(8, 4)
     self.fc4 = nn.Linear(4, out_features_y)
     self.relu = nn.ReLU()
-    self.dropout = nn.Dropout(p=0.5)
 
   def forward(self, X):
-    out = self.dropout(self.relu(self.fc1(X)))
-    out = self.dropout(self.relu(self.fc2(out)))
-    out = self.dropout(self.relu(self.fc3(out)))
+    out = self.relu(self.fc1(X))
+    out = self.relu(self.fc2(out))
+    out = self.relu(self.fc3(out))
     out = self.fc4(out) 
     return out
 
 
 def main():
-  data_size = 100
+  data_size = 1000
   
   test_size = gen_size(data_size, 30) # 30% тестовой выборке, а остальное обучающей
   train_size = data_size - test_size
 
-  x = torch.linspace(-5, 5, data_size).unsqueeze(-1)
-  target = x ** 2  
+  print(f'train size = {train_size}')
+  print(f'test size = {test_size}')
+  exit(0)
 
+  x = torch.linspace(-5, 5, data_size).unsqueeze(-1)
+  target = x ** 2 
   data_train, data_test = gen_data(x, target, train_size)
 
   model = MLP(1, 1)
@@ -102,8 +127,6 @@ def main():
   pred1 = model(x)
   pred2 = model(x)
   print(f"режим eval: pred1 {pred1[:2]} | pred2 {pred2[:2]}")
-
-  exit(0)
 
   opt = optim.SGD(model.parameters(), lr=0.001)
   criterion = nn.MSELoss()
@@ -125,6 +148,7 @@ def main():
       opt.step()
 
     if _ep % 50 == 0:
+      loss_mean /= loss_cnt
       print(f'_ep = {_ep} | loss mean = {loss_mean}')
      
   model.eval()
@@ -132,5 +156,11 @@ def main():
 
 if __name__ == "__main__":
   main()
-  
+
+# вычисление batch normalization при batch = [-3, 3, 4]:
+# 1/ batch.mean = 1.3
+# 2/ x-mean (new batch) = [-4.3, 1.7, 2.7]
+# 3/ variance := new_batch ** 2 = ([18.48, 2.89, 7.29 / 3]).mean = 9.55
+# 4/ std = 3.09
+# 5/ result: new batch / 3.09 = [-1.39, 0.55, 0.8] 
   
