@@ -18,3 +18,8 @@ normalization
 out batch norm
 
 ![...](image/out_bn.png)
+
+
+softmax
+
+![...](image/softmax.png)
