@@ -110,7 +110,7 @@ def main():
 
   print(f'train size = {train_size}')
   print(f'test size = {test_size}')
-  exit(0)
+  
 
   x = torch.linspace(-5, 5, data_size).unsqueeze(-1)
   target = x ** 2 
@@ -118,40 +118,41 @@ def main():
 
   model = MLP(1, 1)
 
-  model.train()
-  pred1 = model(x)
-  pred2 = model(x)
-  print(f"режим train: pred1 {pred1[:2]} | pred2 {pred2[:2]}")
-
-  model.eval()
-  pred1 = model(x)
-  pred2 = model(x)
-  print(f"режим eval: pred1 {pred1[:2]} | pred2 {pred2[:2]}")
-
   opt = optim.SGD(model.parameters(), lr=0.001)
   criterion = nn.MSELoss()
 
   num_ep = 1000
 
-  model.train()
   for _ep in range(num_ep):
-    loss_mean = 0
-    loss_cnt = 0
+    train_loss = 0
+    train_cnt = 0
+    val_loss = 0
+    val_cnt = 0
+
+    model.train()
     for x, y in data_train:
       pred = model(x)
       loss = criterion(pred, y)
-      loss_mean += loss.item()
-      loss_cnt += 1
+      train_loss += loss.item()
+      train_cnt += 1
 
       opt.zero_grad()
       loss.backward()
       opt.step()
 
+    model.eval()
+    with torch.no_grad():
+      for x, y in data_test:
+
+        pred = model(x)
+        val_loss += criterion(pred, y).item()
+        val_cnt += 1      
+
     if _ep % 50 == 0:
-      loss_mean /= loss_cnt
-      print(f'_ep = {_ep} | loss mean = {loss_mean}')
-     
-  model.eval()
+      val_loss_mean = val_loss / val_cnt
+      train_loss_mean = train_loss / train_cnt
+      print(f'ep [{_ep}/{num_ep}] | loss mean (train) {train_loss_mean} | loss mean (val) {val_loss_mean}')
+
 
 
 if __name__ == "__main__":
@@ -163,4 +164,14 @@ if __name__ == "__main__":
 # 3/ variance := new_batch ** 2 = ([18.48, 2.89, 7.29 / 3]).mean = 9.55
 # 4/ std = 3.09
 # 5/ result: new batch / 3.09 = [-1.39, 0.55, 0.8] 
-  
+
+
+# вычисление softmax(x) при logits = [1, 2, 3] 
+# exp(logit)
+  # exp(1) = 2.71828 
+  # exp(2) = 7.38905
+  # exp(3) = 20.0855
+# softmax(logit)
+  # softmax(1) = 2.71828 / 30.19283 = 0.900
+  # softmax(2) = 7.38905 / 30.19283 = 0.2447
+  # 0.6652
