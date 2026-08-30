@@ -143,13 +143,35 @@ def main():
   num_ep = 1000
   model.train()
 
+  """
+  валидационный цикл:
+    добавить patience = 5
+
+    вычислить ср. ошибку
+    сохранить параметры лучшей модели
+    при окончании patience загрузить параметры лучшей модели  """
+
+
+  patience = 3 # после трех высоких средних ошибок валидации будет остановлено обучение      
+  p_counter = 0
+
+  best_loss = 1e50  
+  best_model = {}
+
   for ep in range(num_ep):
+    if p_counter == patience:
+      print(f'обучение завершено (остановлено валидацией), лучшая ошибка: {best_loss}')
+      if best_model: 
+        print(f'модель проинициализирована лучшими параметрами')
+        model = model.load_state_dict(best_model) # загрузка лучшей модели
+
     train_loss = 0
     tl_cnt = 0
 
-    val_loss = 0
+    val_loss = 0 
     vl_cnt = 0
 
+    # цикл обучения
     for x, y in train_loader:
       pred = model(x)
       loss = criterion(pred, y)
@@ -160,19 +182,32 @@ def main():
       train_loss += loss.item()
       tl_cnt += 1
 
+    # валидационный цикл
     for x, y in val_loader:
       pred = model(x)
       val_loss += criterion(pred, y).item()
       vl_cnt += 1      
 
-
+    
     if ep % 50 == 0:
       train_loss_mean = train_loss / tl_cnt
       val_loss_mean = val_loss / vl_cnt
-  
+
+
+      if val_loss_mean < best_loss: # лучшая ошибка стремится к меньшему
+        print(f'val loss mean = {val_loss_mean} | best loss = {best_loss}')
+
+        best_loss = val_loss_mean
+        best_model = model.state_dict()
+      else: # ошибка увеличивается
+        p_counter += 1
+        
       print(f'ep [{ep}/{num_ep}]\tTRAIN loss {train_loss_mean} \t\t VAL loss {val_loss_mean}')
 
+  if p_counter < patience:
+    print(f'обучение завершено (модель обучилась до конца), лучшая ошибка: {best_loss}')
 
+  exit(0)
   model.eval()
 
   with torch.no_grad():
