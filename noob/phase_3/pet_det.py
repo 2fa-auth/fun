@@ -8,37 +8,30 @@ import torch.utils.data as data
 
 """
 pet detector & домашний детектор.
-  *пока на псевдо изображениях
+  *на псевдо изображениях
 """
 
 
 class SetClassBoxes(data.Dataset): 
   def __init__(self, images, target):
     super().__init__()
-
     self.images = images
     self.target = target
     self.len = int((images.size(0) + target.size(0)) / 2)
-
   def __len__(self):
     return self.len
-
   def __getitem__(self, index):
     return (self.images[index], self.target[index])
-  
+
 class ModelLastLayer(nn.Module): 
   def __init__(self, in_features, out_features):
     super().__init__()
-
     self.fc1 = nn.Linear(in_features, 1024)
     self.bn1 = nn.BatchNorm1d(1024)
-
     self.fc2 = nn.Linear(1024, 2048)
     self.bn2 = nn.BatchNorm1d(2048)
-
     self.fc3 = nn.Linear(2048, 512)
     self.bn3 = nn.BatchNorm1d(512)
-    
     self.fc4 = nn.Linear(512, out_features)
     self.relu = nn.ReLU()
   def forward(self, x):
@@ -48,7 +41,6 @@ class ModelLastLayer(nn.Module):
     out = self.relu(self.bn3(self.fc3(out)))
     out = self.fc4(out)
     return out
-
 
 def gen_xy(images, target, test_percent, val_percent):
   main_size = images.size(0)
@@ -62,66 +54,45 @@ def gen_xy(images, target, test_percent, val_percent):
   test_x, test_y = images[train_size+val_size:, ...], target[train_size+val_size:,...]
   return (train_x,train_y,val_x, val_y,test_x,test_y)
 
-def iou(box1, box2):
-  """
-  найти обеъединеие двух рамок:
-    box1, box2
-  """
-  x1_box1 = torch.min(box1[..., 1:2], box1[..., 3:4]) 
-  y1_box1 = torch.min(box1[...,2:3], box1[..., 4:5]) 
-  x2_box1 = torch.max(box1[..., 3:4], box1[..., 1:2])
-  y2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3])
+def IoU(box1, box2):
+  x1_box1, y1_box1 = torch.min(box1[..., 1:2], box1[..., 3:4]), torch.min(box1[...,2:3], box1[..., 4:5]) 
+  x2_box1, y2_box1 = torch.max(box1[..., 3:4], box1[..., 1:2]), torch.max(box1[..., 4:5], box1[..., 2:3])
+  x1_box2, y1_box2 = torch.min(box2[..., 1:2], box2[..., 3:4]), torch.min(box2[...,2:3], box2[..., 4:5]) 
+  x2_box2, y2_box2 = torch.max(box2[..., 3:4], box2[..., 1:2]), torch.max(box2[..., 4:5], box2[..., 2:3])
+  x1_box, y1_box = torch.max(x1_box1, x1_box2), torch.max(y1_box1, y1_box2)
+  x2_box, y2_box = torch.min(x2_box1, x2_box2), torch.min(y2_box1, y2_box2)
+  width, height = torch.clamp(x2_box - x1_box, 0), torch.clamp(y2_box - y1_box, 0)
 
-  x1_box2 = box2[..., 1:2]
-  y1_box2 = box2[..., 2:3]
-  x2_box2 = box2[..., 3:4]
-  y2_box2 = box2[..., 4:5]
-
-  x1_box = torch.max(x1_box1, x1_box2)
-  y1_box = torch.max(y1_box1, y1_box2)
-  x2_box = torch.min(x2_box1, x2_box2)
-  y2_box = torch.min(y2_box1, y2_box2)
-
-  width = torch.clamp(x2_box - x1_box, 0)
-  height = torch.clamp(y2_box - y1_box, 0)
-
-  width_box1 = x2_box1 - x1_box1
-  height_box1 = y2_box1 - y1_box1
-  width_box2 = x2_box2 - x1_box2
-  height_box2 = y2_box2 - y1_box2
-
+  width_box1, height_box1 = x2_box1 - x1_box1, y2_box1 - y1_box1
+  width_box2, height_box2 = x2_box2 - x1_box2, y2_box2 - y1_box2
   intersection_area = width * height
-  box1_area = width_box1 * height_box1
-  box2_area = width_box2 * height_box2
-
+  box1_area, box2_area = width_box1 * height_box1, width_box2 * height_box2
   union_area = box1_area + box2_area - intersection_area
   return (intersection_area / union_area) + 1e-6
 
-
 def BOXESLoss(pred, y):
-  """
-  подсчитать ошибки:
-    насколько сильно рамки совпадают
-    насколько совпадает класс
-  """
-  loss_coords = iou(pred, y)
-  criterion = nn.MSELoss()
+  iou_boxes = IoU(pred, y)
 
+  criterion = nn.MSELoss()
+  loss_coords = criterion(pred, y)
+  loss_iou = 1 - iou_boxes
   loss_class = criterion(y[..., 0], pred[..., 0])
 
-  return (loss_coords + loss_class).mean()
+  return (loss_coords + loss_iou + loss_class).mean()
+
 
 
 def main():
   width_image, height_image = (16, 16) # размер изображения  
   low, high = 0, int(width_image + height_image) / 2 
   size_selection = 400 # количество изображений
-  percent_val = 15 # 15% от всего количества изображений (100%)
-  percent_test = 15 # 15% от всего количества изобрежний
-  num_classes = 18 # количество классов 
+  percent_val = 15 # 15% от 100%
+  percent_test = 15 # 15% от 100% 
+  num_classes = 2 # количество классов 
 
   class_id = torch.round(torch.rand((size_selection, 1)) * num_classes)
   coords = torch.rand((size_selection, 4)) * high
+
   images = torch.rand((size_selection, 3, width_image, height_image)) * (high - low) + low 
   target = torch.cat([class_id, coords], dim=1)
 
@@ -133,14 +104,10 @@ def main():
   val_loader = data.DataLoader(dataset=val_set, batch_size=16, shuffle=True)
   test_loader = data.DataLoader(dataset=test_set, batch_size=16, shuffle=False)
 
-
   model = ModelLastLayer(images.size(1)*images.size(2)*images.size(3), 5)    
   optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01)
   num_ep = 400
-
-
   print("ОБУЧЕНИЕ & ВАЛИДАЦИЯ\n")
-  # обучение / валидация
   for _ep in range(num_ep):
     loss_train, t_cnt = 0,0
     loss_val, v_cnt = 0,0
@@ -154,7 +121,6 @@ def main():
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()
-
     with torch.no_grad():
       model.eval() 
       for x, y in val_loader:
@@ -167,10 +133,8 @@ def main():
       loss_mean_val = loss_val / v_cnt
       print(f'ep [{_ep}/{num_ep}] \t\t LOSS TRAIN {loss_mean_train} \t\t LOSS VAL {loss_mean_val}')
     
-  # тест
   print("\nТЕСТ")
   model.eval()
-
   losses = 0
   l_cnt = 0
   with torch.no_grad():
@@ -179,9 +143,7 @@ def main():
       loss = BOXESLoss(pred, y)
       losses += loss.item()
       l_cnt += 1
-
     print(f"средняя ошибка модели: {losses / l_cnt}")
-    
-    
+        
 if __name__ == "__main__":
   main()
