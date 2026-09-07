@@ -1,16 +1,13 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
-
 import torch
 import torch.nn as nn 
 import torchvision.models as models
-
 import torch.utils.data as data
 
 """
 pet detector & домашний детектор.
   *на псевдо изображениях
 """
-
 
 class SetClassBoxes(data.Dataset): 
   def __init__(self, images, target):
@@ -44,8 +41,8 @@ class ModelLastLayer(nn.Module):
 
 def gen_xy(images, target, test_percent, val_percent):
   main_size = images.size(0)
-
   train_percent = 100 - (test_percent + val_percent)   
+
   train_size = int(main_size * train_percent / 100)
   val_size = int(main_size * val_percent / 100)
 
@@ -72,29 +69,35 @@ def IoU(box1, box2):
 
 def BOXESLoss(pred, y):
   iou_boxes = IoU(pred, y)
-
   criterion = nn.MSELoss()
   loss_coords = criterion(pred, y)
   loss_iou = 1 - iou_boxes
   loss_class = criterion(y[..., 0], pred[..., 0])
-
   return (loss_coords + loss_iou + loss_class).mean()
 
 
-
 def main():
-  width_image, height_image = (16, 16) # размер изображения  
+  #ГИПЕРПАРАМЕТРЫ
+  width_image, height_image = (16, 16)  
   low, high = 0, int(width_image + height_image) / 2 
-  size_selection = 400 # количество изображений
-  percent_val = 15 # 15% от 100%
-  percent_test = 15 # 15% от 100% 
-  num_classes = 2 # количество классов 
+  size_selection = 400 
+  percent_val = 15 
+  percent_test = 15 
+  num_classes = 1 # пока все равно не класс 
 
   class_id = torch.round(torch.rand((size_selection, 1)) * num_classes)
   coords = torch.rand((size_selection, 4)) * high
+  target = torch.cat([class_id, coords], dim=1) # (400, 5) -> [[1, 3, 5, 10, 13]]
+  # целевой image.shape = (400, 3, 16, 16)
+
+  for num_image in size_selection:
+    for num_channel in range(3):
+      pass
+
+  exit(0) # точка останова
+
 
   images = torch.rand((size_selection, 3, width_image, height_image)) * (high - low) + low 
-  target = torch.cat([class_id, coords], dim=1)
 
   train_x, train_y, val_x, val_y, test_x, test_y = gen_xy(images, target, percent_val, percent_test)
   train_set = SetClassBoxes(train_x, train_y)
@@ -135,14 +138,13 @@ def main():
     
   print("\nТЕСТ")
   model.eval()
-  losses = 0
-  l_cnt = 0
+  losses ,l_cnt = 0,0
   with torch.no_grad():
-    for x, y in test_loader:
-      pred = model(x)
-      loss = BOXESLoss(pred, y)
+    for x,y in test_loader:
+      pred=model(x)
+      loss=BOXESLoss(pred, y)
       losses += loss.item()
-      l_cnt += 1
+      l_cnt +=1
     print(f"средняя ошибка модели: {losses / l_cnt}")
         
 if __name__ == "__main__":
