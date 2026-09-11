@@ -35,6 +35,7 @@ class ModelLastLayer(nn.Module):
     self.bn3 = nn.BatchNorm1d(512)
     self.fc4 = nn.Linear(512, out_features)
     self.relu = nn.ReLU()
+
   def forward(self, x):
     x = x.view(x.size(0), -1)
     out = self.relu(self.bn1(self.fc1(x)))
@@ -42,6 +43,81 @@ class ModelLastLayer(nn.Module):
     out = self.relu(self.bn3(self.fc3(out)))
     out = self.fc4(out)
     return out
+  
+class Bbox:
+  def __init__(self, size_selection, coords, images):
+    self.size_selection = size_selection
+    self.images = images
+    self.coords = coords
+
+    #сортировка
+    x1 = torch.min(self.coords[:, 0], self.coords[:, 2]) 
+    y1 = torch.min(self.coords[:, 1], self.coords[:, 3])
+    x2 = torch.max(self.coords[:, 0], coords[:, 2])
+    y2 = torch.max(self.coords[:, 1], self.coords[:, 3])
+
+    self.coords[:, 0] = x1 
+    self.coords[:, 1] = y1 
+    self.coords[:, 2] = x2
+    self.coords[:, 3] = y2
+
+  def draw_bbox(self, min_shades=0, max_shades=255):
+    for sz in range(self.size_selection):
+      x1 = self.coords[sz, 0:1] 
+      y1 = self.coords[sz, 1:2]
+      x2 = self.coords[sz, 2:3]
+      y2 = self.coords[sz, 3:4]
+
+      for color in range(3):
+        rgb = random.random() * (max_shades - min_shades) + min_shades #255 оттенков
+        self.images[sz, color, y1:y1+1, x1:x2+1] = rgb
+        self.images[sz, color, y2:y2+1, x1:x2+1] = rgb
+        self.images[sz, color, y1:y2+1, x1:x1+1] = rgb
+        self.images[sz, color, y1:y2+1, x2:x2+1] = rgb
+    return self.images
+
+
+class BboxLoss_withMSE:
+  def IoU(self, box1, box2):
+    x1_box1 = torch.min(box1[..., 1:2], box1[..., 3:4])
+    y1_box1 = torch.min(box1[...,2:3], box1[..., 4:5]) 
+    x2_box1 = torch.max(box1[..., 3:4], box1[..., 1:2])
+    y2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3])
+
+    x1_box2 = torch.min(box2[..., 1:2], box2[..., 3:4])
+    y1_box2 = torch.min(box2[...,2:3], box2[..., 4:5]) 
+    x2_box2 = torch.max(box2[..., 3:4], box2[..., 1:2])
+    y2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
+
+    x1_box = torch.max(x1_box1, x1_box2)
+    y1_box = torch.max(y1_box1, y1_box2)
+    x2_box = torch.min(x2_box1, x2_box2)
+    y2_box = torch.min(y2_box1, y2_box2)
+
+    width = torch.clamp(x2_box - x1_box, 0)
+    height = torch.clamp(y2_box - y1_box, 0)
+
+    width_box1, height_box1 = x2_box1 - x1_box1, y2_box1 - y1_box1
+    width_box2, height_box2 = x2_box2 - x1_box2, y2_box2 - y1_box2
+    intersection_area = width * height
+    box1_area, box2_area = width_box1 * height_box1, width_box2 * height_box2
+    union_area = box1_area + box2_area - intersection_area
+
+    return (intersection_area / union_area) + 1e-6
+
+  def __call__(self, pred, y):
+    criterion = nn.MSELoss()
+
+    iou_loss = self.IoU(pred, y)
+    coords_loss = criterion(pred, y)
+
+
+    iou_loss = 1 - iou_loss
+    loss_class = criterion(y[..., 0], pred[..., 0])
+
+    return (coords_loss + iou_loss + loss_class).mean()
+
+
 
 def gen_xy(images, target, test_percent, val_percent):
   main_size = images.size(0)
@@ -55,35 +131,8 @@ def gen_xy(images, target, test_percent, val_percent):
   test_x, test_y = images[train_size+val_size:, ...], target[train_size+val_size:,...]
   return (train_x,train_y,val_x, val_y,test_x,test_y)
 
-def IoU(box1, box2):
-  x1_box1, y1_box1 = torch.min(box1[..., 1:2], box1[..., 3:4]), torch.min(box1[...,2:3], box1[..., 4:5]) 
-  x2_box1, y2_box1 = torch.max(box1[..., 3:4], box1[..., 1:2]), torch.max(box1[..., 4:5], box1[..., 2:3])
-  x1_box2, y1_box2 = torch.min(box2[..., 1:2], box2[..., 3:4]), torch.min(box2[...,2:3], box2[..., 4:5]) 
-  x2_box2, y2_box2 = torch.max(box2[..., 3:4], box2[..., 1:2]), torch.max(box2[..., 4:5], box2[..., 2:3])
-  x1_box, y1_box = torch.max(x1_box1, x1_box2), torch.max(y1_box1, y1_box2)
-  x2_box, y2_box = torch.min(x2_box1, x2_box2), torch.min(y2_box1, y2_box2)
-  width, height = torch.clamp(x2_box - x1_box, 0), torch.clamp(y2_box - y1_box, 0)
-
-  width_box1, height_box1 = x2_box1 - x1_box1, y2_box1 - y1_box1
-  width_box2, height_box2 = x2_box2 - x1_box2, y2_box2 - y1_box2
-  intersection_area = width * height
-  box1_area, box2_area = width_box1 * height_box1, width_box2 * height_box2
-  union_area = box1_area + box2_area - intersection_area
-
-  return (intersection_area / union_area) + 1e-6
-
-def BOXESLoss(pred, y):
-  iou_boxes = IoU(pred, y)
-  criterion = nn.MSELoss()
-  loss_coords = criterion(pred, y)
-  loss_iou = 1 - iou_boxes
-  loss_class = criterion(y[..., 0], pred[..., 0])
-
-  return (loss_coords + loss_iou + loss_class).mean()
-
-
 def main():
-  width_image, height_image = (16, 16)  
+  width_image, height_image = (7, 7)  
   low, high = 0, int(width_image + height_image) / 2 
   size_selection = 1000 
   percent_val = 15 
@@ -92,27 +141,11 @@ def main():
 
   class_id = torch.round(torch.round(torch.rand((size_selection, 1)) * num_classes + 0)).to(torch.int32)
   coords = torch.floor(torch.rand((size_selection, 4)) * (high - low) + low).to(torch.int32)
-
-  x1,y1 = torch.min(coords[:, 0], coords[:, 2]), torch.min(coords[:, 1], coords[:, 3])
-  x2,y2 = torch.max(coords[:, 0], coords[:, 2]), torch.max(coords[:, 1], coords[:, 3])
-  coords[:, 0], coords[:, 1], coords[:, 2], coords[:, 3] = x1,y1,x2,y2
-
   target = torch.cat([class_id, coords], dim=1)
   images = torch.randn(size_selection, 3, width_image, height_image)*0+0
 
-  #нарисовка bbox со случайным RGB
-  for sz in range(size_selection):
-    x1 = coords[sz, 0:1] 
-    y1 = coords[sz, 1:2]
-    x2 = coords[sz, 2:3]
-    y2 = coords[sz, 3:4]
-
-    for color in range(3):
-      rgb = random.random() * (255-0) + 0 #255 оттенков
-      images[sz, color, y1:y1+1, x1:x2+1] = rgb
-      images[sz, color, y2:y2+1, x1:x2+1] = rgb
-      images[sz, color, y1:y2+1, x1:x1+1] = rgb
-      images[sz, color, y1:y2+1, x2:x2+1] = rgb
+  box_image = Bbox(size_selection, coords, images)
+  images = box_image.draw_bbox()
 
   target = target.to(torch.float32)
 
@@ -122,8 +155,12 @@ def main():
   test_loader = data.DataLoader(dataset = SetClassBoxes(test_x, test_y), batch_size=32, shuffle=False)
 
   model = ModelLastLayer(images.size(1)*images.size(2)*images.size(3), 5)    
+  criterion = BboxLoss_withMSE()
   optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01)
   num_ep = 400
+
+
+
   print("ОБУЧЕНИЕ & ВАЛИДАЦИЯ\n")
   for _ep in range(num_ep):
     loss_train, t_cnt = 0,0
@@ -132,9 +169,9 @@ def main():
     model.train()
     for x, y in train_loader:
       pred = model(x)
-      loss = BOXESLoss(pred, y)
-      if _ep % 10 == 0:
-        print(f'pred:\n{pred}, y:\n{y}\nloss = {loss}')
+      loss = criterion(pred, y)
+      # if _ep % 10 == 0:
+        # print(f'pred:\n{pred}, y:\n{y}\nloss = {loss}')
 
       loss_train += loss.item()
       t_cnt += 1
@@ -145,7 +182,7 @@ def main():
       model.eval() 
       for x, y in val_loader:
         pred = model(x)
-        loss_val += BOXESLoss(pred, y).item()
+        loss_val += criterion(pred, y).item()
         v_cnt += 1
 
     if _ep % 50 == 0:
@@ -159,7 +196,7 @@ def main():
   with torch.no_grad():
     for x,y in test_loader:
       pred=model(x)
-      loss=BOXESLoss(pred, y)
+      loss=criterion(pred, y)
       losses += loss.item()
       l_cnt +=1
     print(f"средняя ошибка модели: {losses / l_cnt}")
