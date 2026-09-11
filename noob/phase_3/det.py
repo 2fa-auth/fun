@@ -27,13 +27,14 @@ class SetClassBoxes(data.Dataset):
 class ModelLastLayer(nn.Module): 
   def __init__(self, in_features, out_features):
     super().__init__()
-    self.fc1 = nn.Linear(in_features, 512)
-    self.bn1 = nn.BatchNorm1d(512)
-    self.fc2 = nn.Linear(512, 1024)
-    self.bn2 = nn.BatchNorm1d(1024)
-    self.fc3 = nn.Linear(1024, 512)
-    self.bn3 = nn.BatchNorm1d(512)
-    self.fc4 = nn.Linear(512, out_features)
+
+    self.fc1 = nn.Linear(in_features, 128)
+    self.bn1 = nn.BatchNorm1d(128)
+    self.fc2 = nn.Linear(128, 256)
+    self.bn2 = nn.BatchNorm1d(256)
+    self.fc3 = nn.Linear(256, 128)
+    self.bn3 = nn.BatchNorm1d(128)
+    self.fc4 = nn.Linear(128, out_features)
     self.relu = nn.ReLU()
 
   def forward(self, x):
@@ -73,11 +74,15 @@ class Bbox:
         self.images[sz, color, y1:y1+1, x1:x2+1] = rgb
         self.images[sz, color, y2:y2+1, x1:x2+1] = rgb
         self.images[sz, color, y1:y2+1, x1:x1+1] = rgb
-        self.images[sz, color, y1:y2+1, x2:x2+1] = rgb
+        self.images[sz, color, y1:y2+1, x2:x2+1] = rgb  
+
     return self.images
 
 
 class BboxLoss_withMSE:
+  def __init__(self):
+    self.num_calls = 0
+
   def IoU(self, box1, box2):
     x1_box1 = torch.min(box1[..., 1:2], box1[..., 3:4])
     y1_box1 = torch.min(box1[...,2:3], box1[..., 4:5]) 
@@ -103,19 +108,23 @@ class BboxLoss_withMSE:
     box1_area, box2_area = width_box1 * height_box1, width_box2 * height_box2
     union_area = box1_area + box2_area - intersection_area
 
-    return (intersection_area / union_area) + 1e-6
+    return intersection_area / (union_area + 1e-6)
 
   def __call__(self, pred, y):
     criterion = nn.MSELoss()
 
     iou_loss = self.IoU(pred, y)
-    coords_loss = criterion(pred, y)
-
+    # if self.num_calls % 1000 == 0:
+      # print(self.num_calls)
+      # print(iou_loss)
+    # self.num_calls += 1
+    
+    coords_loss = criterion(pred[:, 1:], y[:, 1:])
 
     iou_loss = 1 - iou_loss
     loss_class = criterion(y[..., 0], pred[..., 0])
 
-    return (coords_loss + iou_loss + loss_class).mean()
+    return (iou_loss + coords_loss).mean() # здесь я специально не добавлял ошибку класса поскольку классов пока не существует
 
 
 
@@ -134,7 +143,7 @@ def gen_xy(images, target, test_percent, val_percent):
 def main():
   width_image, height_image = (7, 7)  
   low, high = 0, int(width_image + height_image) / 2 
-  size_selection = 1000 
+  size_selection = 400
   percent_val = 15 
   percent_test = 15 
   num_classes = 0
@@ -145,7 +154,7 @@ def main():
   images = torch.randn(size_selection, 3, width_image, height_image)*0+0
 
   box_image = Bbox(size_selection, coords, images)
-  images = box_image.draw_bbox()
+  images = box_image.draw_bbox(min_shades=1,max_shades=1)
 
   target = target.to(torch.float32)
 
@@ -156,8 +165,8 @@ def main():
 
   model = ModelLastLayer(images.size(1)*images.size(2)*images.size(3), 5)    
   criterion = BboxLoss_withMSE()
-  optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01)
-  num_ep = 400
+  optimizer = torch.optim.Adam(params=model.parameters(), lr=0.0001)
+  num_ep = 1000
 
 
 
@@ -185,7 +194,7 @@ def main():
         loss_val += criterion(pred, y).item()
         v_cnt += 1
 
-    if _ep % 50 == 0:
+    if _ep % 200 == 0:
       loss_mean_train = loss_train / t_cnt
       loss_mean_val = loss_val / v_cnt
       print(f'ep [{_ep}/{num_ep}] \t\t LOSS TRAIN {loss_mean_train} \t\t LOSS VAL {loss_mean_val}')
