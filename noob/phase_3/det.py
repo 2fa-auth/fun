@@ -51,7 +51,9 @@ class Bbox:
     self.images = images
     self.coords = coords
 
-    #сортировка
+    print(coords[0])
+
+    #сортировка 
     x1 = torch.min(self.coords[:, 0], self.coords[:, 2]) 
     y1 = torch.min(self.coords[:, 1], self.coords[:, 3])
     x2 = torch.max(self.coords[:, 0], coords[:, 2])
@@ -61,6 +63,7 @@ class Bbox:
     self.coords[:, 1] = y1 
     self.coords[:, 2] = x2
     self.coords[:, 3] = y2
+
 
   def draw_bbox(self, min_shades=0, max_shades=255):
     for sz in range(self.size_selection):
@@ -127,7 +130,6 @@ class BboxLoss_withMSE:
     return (iou_loss + coords_loss).mean() # здесь я специально не добавлял ошибку класса поскольку классов пока не существует
 
 
-
 def gen_xy(images, target, test_percent, val_percent):
   main_size = images.size(0)
   train_percent = 100 - (test_percent + val_percent)   
@@ -140,20 +142,34 @@ def gen_xy(images, target, test_percent, val_percent):
   test_x, test_y = images[train_size+val_size:, ...], target[train_size+val_size:,...]
   return (train_x,train_y,val_x, val_y,test_x,test_y)
 
+
+def gen_rand_coords(num_samples, h, w): # -> coords.shape = (sz, 4)
+  h -= 1
+  w -= 1
+  coords = torch.zeros(num_samples, 4).to(torch.int32)
+  for sample in range(num_samples):
+    coords[sample, 0:1] = random.randint(0,w-2) # x1
+    coords[sample, 1:2] = random.randint(0,h-2)
+
+    coords[sample, 2:3] = random.randint(int((coords[sample,0]+2).item()), w)
+    coords[sample, 3:4] = random.randint(int((coords[sample,1]+2).item()), h)
+  return coords
+
+
 def main():
-  width_image, height_image = (7, 7)  
-  low, high = 0, int(width_image + height_image) / 2 
-  size_selection = 400
+  w, h = (7, 7)  
+  low, high = 0, int(w + h) / 2 
+  num_samples = 400
   percent_val = 15 
   percent_test = 15 
   num_classes = 0
 
-  class_id = torch.round(torch.round(torch.rand((size_selection, 1)) * num_classes + 0)).to(torch.int32)
-  coords = torch.floor(torch.rand((size_selection, 4)) * (high - low) + low).to(torch.int32)
+  class_id = torch.round(torch.round(torch.rand((num_samples, 1)) * num_classes + 0)).to(torch.int32)
+  coords = gen_rand_coords(num_samples, w, h)
   target = torch.cat([class_id, coords], dim=1)
-  images = torch.randn(size_selection, 3, width_image, height_image)*0+0
+  images = torch.randn(num_samples, 3, h, w)*0+0
 
-  box_image = Bbox(size_selection, coords, images)
+  box_image = Bbox(num_samples, coords, images)
   images = box_image.draw_bbox(min_shades=1,max_shades=1)
 
   target = target.to(torch.float32)
