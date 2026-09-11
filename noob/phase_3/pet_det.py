@@ -4,6 +4,10 @@ import torch.nn as nn
 import torchvision.models as models
 import torch.utils.data as data
 
+import math 
+import copy
+import random
+
 """
 pet detector & домашний детектор.
   *на псевдо изображениях
@@ -23,11 +27,11 @@ class SetClassBoxes(data.Dataset):
 class ModelLastLayer(nn.Module): 
   def __init__(self, in_features, out_features):
     super().__init__()
-    self.fc1 = nn.Linear(in_features, 1024)
-    self.bn1 = nn.BatchNorm1d(1024)
-    self.fc2 = nn.Linear(1024, 2048)
-    self.bn2 = nn.BatchNorm1d(2048)
-    self.fc3 = nn.Linear(2048, 512)
+    self.fc1 = nn.Linear(in_features, 512)
+    self.bn1 = nn.BatchNorm1d(512)
+    self.fc2 = nn.Linear(512, 1024)
+    self.bn2 = nn.BatchNorm1d(1024)
+    self.fc3 = nn.Linear(1024, 512)
     self.bn3 = nn.BatchNorm1d(512)
     self.fc4 = nn.Linear(512, out_features)
     self.relu = nn.ReLU()
@@ -65,6 +69,7 @@ def IoU(box1, box2):
   intersection_area = width * height
   box1_area, box2_area = width_box1 * height_box1, width_box2 * height_box2
   union_area = box1_area + box2_area - intersection_area
+
   return (intersection_area / union_area) + 1e-6
 
 def BOXESLoss(pred, y):
@@ -73,39 +78,48 @@ def BOXESLoss(pred, y):
   loss_coords = criterion(pred, y)
   loss_iou = 1 - iou_boxes
   loss_class = criterion(y[..., 0], pred[..., 0])
+
   return (loss_coords + loss_iou + loss_class).mean()
 
 
 def main():
-  #ГИПЕРПАРАМЕТРЫ
   width_image, height_image = (16, 16)  
   low, high = 0, int(width_image + height_image) / 2 
-  size_selection = 400 
+  size_selection = 1000 
   percent_val = 15 
   percent_test = 15 
-  num_classes = 1 # пока все равно не класс 
+  num_classes = 0
 
-  class_id = torch.round(torch.rand((size_selection, 1)) * num_classes)
-  coords = torch.rand((size_selection, 4)) * high
-  target = torch.cat([class_id, coords], dim=1) # (400, 5) -> [[1, 3, 5, 10, 13]]
-  # целевой image.shape = (400, 3, 16, 16)
+  class_id = torch.round(torch.round(torch.rand((size_selection, 1)) * num_classes + 0)).to(torch.int32)
+  coords = torch.floor(torch.rand((size_selection, 4)) * (high - low) + low).to(torch.int32)
 
-  for num_image in size_selection:
-    for num_channel in range(3):
-      pass
+  x1,y1 = torch.min(coords[:, 0], coords[:, 2]), torch.min(coords[:, 1], coords[:, 3])
+  x2,y2 = torch.max(coords[:, 0], coords[:, 2]), torch.max(coords[:, 1], coords[:, 3])
+  coords[:, 0], coords[:, 1], coords[:, 2], coords[:, 3] = x1,y1,x2,y2
 
-  exit(0) # точка останова
+  target = torch.cat([class_id, coords], dim=1)
+  images = torch.randn(size_selection, 3, width_image, height_image)*0+0
 
+  #нарисовка bbox со случайным RGB
+  for sz in range(size_selection):
+    x1 = coords[sz, 0:1] 
+    y1 = coords[sz, 1:2]
+    x2 = coords[sz, 2:3]
+    y2 = coords[sz, 3:4]
 
-  images = torch.rand((size_selection, 3, width_image, height_image)) * (high - low) + low 
+    for color in range(3):
+      rgb = random.random() * (255-0) + 0 #255 оттенков
+      images[sz, color, y1:y1+1, x1:x2+1] = rgb
+      images[sz, color, y2:y2+1, x1:x2+1] = rgb
+      images[sz, color, y1:y2+1, x1:x1+1] = rgb
+      images[sz, color, y1:y2+1, x2:x2+1] = rgb
+
+  target = target.to(torch.float32)
 
   train_x, train_y, val_x, val_y, test_x, test_y = gen_xy(images, target, percent_val, percent_test)
-  train_set = SetClassBoxes(train_x, train_y)
-  val_set = SetClassBoxes(val_x, val_y)
-  test_set = SetClassBoxes(test_x, test_y)
-  train_loader = data.DataLoader(dataset=train_set, batch_size=32, shuffle=True)
-  val_loader = data.DataLoader(dataset=val_set, batch_size=16, shuffle=True)
-  test_loader = data.DataLoader(dataset=test_set, batch_size=16, shuffle=False)
+  train_loader = data.DataLoader(dataset = SetClassBoxes(train_x, train_y), batch_size=64, shuffle=True)
+  val_loader = data.DataLoader(dataset = SetClassBoxes(val_x, val_y), batch_size=32, shuffle=True)
+  test_loader = data.DataLoader(dataset = SetClassBoxes(test_x, test_y), batch_size=32, shuffle=False)
 
   model = ModelLastLayer(images.size(1)*images.size(2)*images.size(3), 5)    
   optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01)
@@ -119,6 +133,9 @@ def main():
     for x, y in train_loader:
       pred = model(x)
       loss = BOXESLoss(pred, y)
+      if _ep % 10 == 0:
+        print(f'pred:\n{pred}, y:\n{y}\nloss = {loss}')
+
       loss_train += loss.item()
       t_cnt += 1
       optimizer.zero_grad()
@@ -131,7 +148,7 @@ def main():
         loss_val += BOXESLoss(pred, y).item()
         v_cnt += 1
 
-    if _ep % 10 == 0:
+    if _ep % 50 == 0:
       loss_mean_train = loss_train / t_cnt
       loss_mean_val = loss_val / v_cnt
       print(f'ep [{_ep}/{num_ep}] \t\t LOSS TRAIN {loss_mean_train} \t\t LOSS VAL {loss_mean_val}')
