@@ -52,30 +52,30 @@ class Bbox:
     self.coords = coords
 
     #сортировка 
-    x1 = torch.min(self.coords[:, 0], self.coords[:, 2]) 
-    y1 = torch.min(self.coords[:, 1], self.coords[:, 3])
-    x2 = torch.max(self.coords[:, 0], coords[:, 2])
-    y2 = torch.max(self.coords[:, 1], self.coords[:, 3])
+    x1 = torch.min(self.coords[:, 0:1], self.coords[:, 2:3]) 
+    y1 = torch.min(self.coords[:, 1:2], self.coords[:, 3:4])
+    x2 = torch.max(self.coords[:, 0:1], coords[:, 2:3])
+    y2 = torch.max(self.coords[:, 1:2], self.coords[:, 3:4])
 
-    self.coords[:, 0] = x1 
-    self.coords[:, 1] = y1 
-    self.coords[:, 2] = x2
-    self.coords[:, 3] = y2
+    self.coords[:, 0:1] = x1 
+    self.coords[:, 1:2] = y1 
+    self.coords[:, 2:3] = x2
+    self.coords[:, 3:4] = y2
 
 
   def draw_bbox(self, min_shades=0, max_shades=255):
     for sz in range(self.size_selection):
-      x1 = self.coords[sz, 0:1] 
-      y1 = self.coords[sz, 1:2]
-      x2 = self.coords[sz, 2:3]
-      y2 = self.coords[sz, 3:4]
+      x1 = int(round((self.coords[sz, 0:1]).item()))
+      y1 = int(round((self.coords[sz, 1:2]).item()))
+      x2 = int(round((self.coords[sz, 2:3]).item()))
+      y2 = int(round((self.coords[sz, 3:4]).item()))
 
       for color in range(3):
         rgb = random.random() * (max_shades - min_shades) + min_shades #255 оттенков
         self.images[sz, color, y1:y1+1, x1:x2+1] = rgb
         self.images[sz, color, y2:y2+1, x1:x2+1] = rgb
         self.images[sz, color, y1:y2+1, x1:x1+1] = rgb
-        self.images[sz, color, y1:y2+1, x2:x2+1] = rgb  
+        self.images[sz, color, y1:y2+1, x2:x2+1] = rgb
 
     return self.images
 
@@ -135,9 +135,13 @@ def gen_xy(images, target, test_percent, val_percent):
   train_size = int(main_size * train_percent / 100)
   val_size = int(main_size * val_percent / 100)
 
-  train_x, train_y = images[:train_size, ...], target[:train_size, ...]
-  val_x, val_y = images[train_size:train_size+val_size, ...], target[train_size:train_size+val_size, ...]
-  test_x, test_y = images[train_size+val_size:, ...], target[train_size+val_size:,...]
+  train_x = images[:train_size, ...]
+  train_y = target[:train_size, ...]
+  val_x = images[train_size:train_size+val_size, ...]
+  val_y = target[train_size:train_size+val_size, ...]
+  test_x = images[train_size+val_size:, ...]
+  test_y = target[train_size+val_size:,...]
+
   return (train_x,train_y,val_x, val_y,test_x,test_y)
 
 
@@ -164,7 +168,7 @@ def main():
   class_id = torch.round(torch.round(torch.rand((num_samples, 1)) * num_classes + 0)).to(torch.int32)
   coords = gen_rand_coords(num_samples, w, h)
   target = torch.cat([class_id, coords], dim=1)
-  images = torch.randn(num_samples, 3, h, w)*0+0
+  images = torch.zeros(num_samples, 3, h, w)
 
   box_image = Bbox(num_samples, coords, images)
   images = box_image.draw_bbox(min_shades=1,max_shades=1)
@@ -211,24 +215,40 @@ def main():
       loss_mean_train = loss_train / t_cnt
       loss_mean_val = loss_val / v_cnt
       print(f'ep [{_ep}/{num_ep}] \t\t LOSS TRAIN {loss_mean_train} \t\t LOSS VAL {loss_mean_val}')
-    
+      
   print("\nТЕСТ")
   model.eval()
 
   losses = 0 
   l_cnt = 0
-  
+
+  patience = 4
   
   with torch.no_grad():
     for x,y in test_loader:
       pred=model(x)
-      print(f'PRED:\n{pred}\n\nY:\n{y}')
       loss=criterion(pred, y)
-      print(f'LOSS = {loss}')
-      exit(0)
+
+      if patience > 0:
+        print(f'рамка в координатах = {torch.round(pred[0,1:]).tolist()} \t target = {torch.round(y[0,1:]).tolist()}')
+
+        box_image = Bbox(1, pred[:, 1:], x) # без учета класса
+        pred_image = box_image.draw_bbox(1,1)
+        print(f'модель нарисоваола:\n{pred_image[0][0]}') 
+
+        box_image = Bbox(1,y[:,1:], x) # без учета класса
+        y_image = box_image.draw_bbox(1,1)
+        print(f'\nкак верно:\n{y_image[0][0]}')        
+
+        patience    -= 1
+
       losses += loss.item()
       l_cnt +=1
-    print(f"средняя ошибка модели: {losses / l_cnt}")
-  
+    print(f"средняя ошибка модели после теста: {losses / l_cnt}")
+
+  torch.save(model.state_dict(), 'model_params.pth.tar')
+
+
+
 if __name__ == "__main__":
   main()
