@@ -4,34 +4,30 @@ import random
 
   
 if __name__ == "__main__":
-  h,w = 6,6
+  h,w = 10,10
   
-  image = torch.randn(h,w) * 0 + 0
+  image = torch.zeros(10, h,w)
+  hbox = 3
+  wbox = 3
+  labels = 2
+  for num_img in range(image.size(0)):
+    nums_label = random.randint(0,2)
+    for _ in range(nums_label):
+      label = random.randint(1,labels)
+      y_rand = random.randint(1,h-2)
+      x_rand = random.randint(1,w-2)
+      image[num_img, y_rand, x_rand] = label
 
-  hbox = h-1
-  wbox = w-1
+      x1 = x_rand-1
+      y1 = y_rand-1
+      x2 = x_rand+1
+      y2 = y_rand+1
 
-
-  x1 = random.randint(0,wbox-2)
-  y1 = random.randint(0,hbox-2)
-
-  x2 = random.randint(x1+2,wbox) 
-  y2 = random.randint(y1+2,hbox)
-
-  x1 = min(x1,x2)
-  y1 = min(y1,y2)
-  x2 = max(x1,x2)
-  y2 = max(y1,y2)
-
-
-  print(x1,y1,x2,y2)
-  print(f'исходный\n{image}\n')
-
-  image[y1:y1+1, x1:x2+1] = 1
-  image[y2:y2+1, x1:x2+1] = 1
-  image[y1:y2+1, x1:x1+1] = 1
-  image[y1:y2+1, x2:x2+1] = 1
+      image[num_img, y1:y1+1, x1:x2+1] = 10
+      image[num_img, y2:y2+1, x1:x2+1] = 10
+      image[num_img, y1:y2+1, x1:x1+1] = 10
+      image[num_img, y1:y2+1, x2:x2+1] = 10
 
 
-  print(f'slice method:\n{image}')
+  print(image)
 

@@ -79,7 +79,6 @@ class Bbox:
 
     return self.images
 
-
 class BboxLoss_withMSE:
   def __init__(self):
     self.num_calls = 0
@@ -240,7 +239,7 @@ def main():
         y_image = box_image.draw_bbox(1,1)
         print(f'\nкак верно:\n{y_image[0][0]}')        
 
-        patience    -= 1
+        patience -= 1
 
       losses += loss.item()
       l_cnt +=1
