@@ -51,8 +51,6 @@ class Bbox:
     self.images = images
     self.coords = coords
 
-    print(coords[0])
-
     #сортировка 
     x1 = torch.min(self.coords[:, 0], self.coords[:, 2]) 
     y1 = torch.min(self.coords[:, 1], self.coords[:, 3])
@@ -148,20 +146,19 @@ def gen_rand_coords(num_samples, h, w): # -> coords.shape = (sz, 4)
   w -= 1
   coords = torch.zeros(num_samples, 4).to(torch.int32)
   for sample in range(num_samples):
-    coords[sample, 0:1] = random.randint(0,w-2) # x1
+    coords[sample, 0:1] = random.randint(0,w-2)
     coords[sample, 1:2] = random.randint(0,h-2)
-
     coords[sample, 2:3] = random.randint(int((coords[sample,0]+2).item()), w)
     coords[sample, 3:4] = random.randint(int((coords[sample,1]+2).item()), h)
+
   return coords
 
 
 def main():
   w, h = (7, 7)  
-  low, high = 0, int(w + h) / 2 
   num_samples = 400
-  percent_val = 15 
-  percent_test = 15 
+  percent_val = 20
+  percent_test = 10 
   num_classes = 0
 
   class_id = torch.round(torch.round(torch.rand((num_samples, 1)) * num_classes + 0)).to(torch.int32)
@@ -195,7 +192,7 @@ def main():
     for x, y in train_loader:
       pred = model(x)
       loss = criterion(pred, y)
-      # if _ep % 10 == 0:
+      # if _ep % 1000 == 0:
         # print(f'pred:\n{pred}, y:\n{y}\nloss = {loss}')
 
       loss_train += loss.item()
@@ -217,14 +214,21 @@ def main():
     
   print("\nТЕСТ")
   model.eval()
-  losses ,l_cnt = 0,0
+
+  losses = 0 
+  l_cnt = 0
+  
+  
   with torch.no_grad():
     for x,y in test_loader:
       pred=model(x)
+      print(f'PRED:\n{pred}\n\nY:\n{y}')
       loss=criterion(pred, y)
+      print(f'LOSS = {loss}')
+      exit(0)
       losses += loss.item()
       l_cnt +=1
     print(f"средняя ошибка модели: {losses / l_cnt}")
-        
+  
 if __name__ == "__main__":
   main()
