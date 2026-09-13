@@ -9,8 +9,18 @@ import copy
 import random
 
 """
-pet detector & домашний детектор.
-  *на псевдо изображениях
+цель модели; научиться распознавть несколько объектов на изображении,
+где:
+  число '0' - фон
+  число '1' - первый объект
+  число '2' - второй объект
+  число '10' - рамка, которая находит объект
+
+4 закодированных правила по которым модель работает:
+1/ составляя рамку (bounding box) из числа '10'. 
+2/ на изображении могут быть всего два объекта (класса): '2' и '1'
+3/ они расположены в рандомном порядке и в рандомном количестве.
+4/ координаты объектов генерируется в диапозоне всей длины-2 и ширины-2 изображения
 """
 
 class SetClassBoxes(data.Dataset): 
@@ -80,9 +90,6 @@ class Bbox:
     return self.images
 
 class BboxLoss_withMSE:
-  def __init__(self):
-    self.num_calls = 0
-
   def IoU(self, box1, box2):
     x1_box1 = torch.min(box1[..., 1:2], box1[..., 3:4])
     y1_box1 = torch.min(box1[...,2:3], box1[..., 4:5]) 
@@ -114,17 +121,12 @@ class BboxLoss_withMSE:
     criterion = nn.MSELoss()
 
     iou_loss = self.IoU(pred, y)
-    # if self.num_calls % 1000 == 0:
-      # print(self.num_calls)
-      # print(iou_loss)
-    # self.num_calls += 1
-    
     coords_loss = criterion(pred[:, 1:], y[:, 1:])
 
     iou_loss = 1 - iou_loss
     loss_class = criterion(y[..., 0], pred[..., 0])
 
-    return (iou_loss + coords_loss).mean() # здесь я специально не добавлял ошибку класса поскольку классов пока не существует
+    return (loss_class + iou_loss + coords_loss).mean() # здесь я специально не добавлял ошибку класса поскольку классов пока не существует
 
 
 def gen_xy(images, target, test_percent, val_percent):
@@ -162,7 +164,7 @@ def main():
   num_samples = 400
   percent_val = 20
   percent_test = 10 
-  num_classes = 0
+  num_classes = 2
 
   class_id = torch.round(torch.round(torch.rand((num_samples, 1)) * num_classes + 0)).to(torch.int32)
   coords = gen_rand_coords(num_samples, w, h)
