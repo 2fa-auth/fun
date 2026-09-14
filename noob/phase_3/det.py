@@ -8,31 +8,21 @@ import math
 import copy
 import random
 
-"""
-цель модели; научиться распознавть несколько объектов на изображении,
-где:
-  число '0' - фон
-  число '1' - первый объект
-  число '2' - второй объект
-  число '10' - рамка, которая находит объект
 
-4 закодированных правила по которым модель работает:
-1/ составляя рамку (bounding box) из числа '10'. 
-2/ на изображении могут быть всего два объекта (класса): '2' и '1'
-3/ они расположены в рандомном порядке и в рандомном количестве.
-4/ координаты объектов генерируется в диапозоне всей длины-2 и ширины-2 изображения
-"""
 
 class SetClassBoxes(data.Dataset): 
   def __init__(self, images, target):
     super().__init__()
     self.images = images
     self.target = target
-    self.len = int((images.size(0) + target.size(0)) / 2)
+    self.len = int(images.size(0))
+
   def __len__(self):
     return self.len
+
   def __getitem__(self, index):
     return (self.images[index], self.target[index])
+
 
 class ModelLastLayer(nn.Module): 
   def __init__(self, in_features, out_features):
@@ -40,11 +30,11 @@ class ModelLastLayer(nn.Module):
 
     self.fc1 = nn.Linear(in_features, 128)
     self.bn1 = nn.BatchNorm1d(128)
-    self.fc2 = nn.Linear(128, 256)
-    self.bn2 = nn.BatchNorm1d(256)
-    self.fc3 = nn.Linear(256, 128)
-    self.bn3 = nn.BatchNorm1d(128)
-    self.fc4 = nn.Linear(128, out_features)
+    self.fc2 = nn.Linear(128, 512)
+    self.bn2 = nn.BatchNorm1d(512)
+    self.fc3 = nn.Linear(512, 256)
+    self.bn3 = nn.BatchNorm1d(256)
+    self.fc4 = nn.Linear(256, out_features)
     self.relu = nn.ReLU()
 
   def forward(self, x):
@@ -55,51 +45,18 @@ class ModelLastLayer(nn.Module):
     out = self.fc4(out)
     return out
   
-class Bbox:
-  def __init__(self, size_selection, coords, images):
-    self.size_selection = size_selection
-    self.images = images
-    self.coords = coords
-
-    #сортировка 
-    x1 = torch.min(self.coords[:, 0:1], self.coords[:, 2:3]) 
-    y1 = torch.min(self.coords[:, 1:2], self.coords[:, 3:4])
-    x2 = torch.max(self.coords[:, 0:1], coords[:, 2:3])
-    y2 = torch.max(self.coords[:, 1:2], self.coords[:, 3:4])
-
-    self.coords[:, 0:1] = x1 
-    self.coords[:, 1:2] = y1 
-    self.coords[:, 2:3] = x2
-    self.coords[:, 3:4] = y2
-
-
-  def draw_bbox(self, min_shades=0, max_shades=255):
-    for sz in range(self.size_selection):
-      x1 = int(round((self.coords[sz, 0:1]).item()))
-      y1 = int(round((self.coords[sz, 1:2]).item()))
-      x2 = int(round((self.coords[sz, 2:3]).item()))
-      y2 = int(round((self.coords[sz, 3:4]).item()))
-
-      for color in range(3):
-        rgb = random.random() * (max_shades - min_shades) + min_shades #255 оттенков
-        self.images[sz, color, y1:y1+1, x1:x2+1] = rgb
-        self.images[sz, color, y2:y2+1, x1:x2+1] = rgb
-        self.images[sz, color, y1:y2+1, x1:x1+1] = rgb
-        self.images[sz, color, y1:y2+1, x2:x2+1] = rgb
-
-    return self.images
 
 class BboxLoss_withMSE:
   def IoU(self, box1, box2):
-    x1_box1 = torch.min(box1[..., 1:2], box1[..., 3:4])
-    y1_box1 = torch.min(box1[...,2:3], box1[..., 4:5]) 
-    x2_box1 = torch.max(box1[..., 3:4], box1[..., 1:2])
-    y2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3])
+    x1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5])
+    y1_box1 = torch.min(box1[...,3:4], box1[..., 5:6]) 
+    x2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3])
+    y2_box1 = torch.max(box1[..., 5:6], box1[...,3:4])
 
-    x1_box2 = torch.min(box2[..., 1:2], box2[..., 3:4])
-    y1_box2 = torch.min(box2[...,2:3], box2[..., 4:5]) 
-    x2_box2 = torch.max(box2[..., 3:4], box2[..., 1:2])
-    y2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
+    x1_box2 = torch.min(box2[..., 2:3], box2[..., 4:5])
+    y1_box2 = torch.min(box2[...,3:4], box2[..., 5:6]) 
+    x2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
+    y2_box2 = torch.max(box2[..., 5:6], box2[..., 3:4])
 
     x1_box = torch.max(x1_box1, x1_box2)
     y1_box = torch.max(y1_box1, y1_box2)
@@ -121,13 +78,53 @@ class BboxLoss_withMSE:
     criterion = nn.MSELoss()
 
     iou_loss = self.IoU(pred, y)
-    coords_loss = criterion(pred[:, 1:], y[:, 1:])
+    coords_loss = criterion(pred, y)
 
     iou_loss = 1 - iou_loss
     loss_class = criterion(y[..., 0], pred[..., 0])
 
-    return (loss_class + iou_loss + coords_loss).mean() # здесь я специально не добавлял ошибку класса поскольку классов пока не существует
+    return (loss_class + iou_loss + coords_loss).mean()
 
+
+class Bbox:
+  def __init__(self, images):
+    self.batch_size = images.size(0)
+    self.images = images
+    self.h = images.size(-1)
+    self.w = images.size(-2)
+    self.hbox = 3
+    self.wbox = 3
+
+  def draw_boxes(self, labels):
+    target = torch.zeros(self.batch_size, labels, 6)
+
+    for n in range(self.batch_size):
+      for n_class in range(2):
+        label = random.randint(0,labels)
+        present = 0 if label == 0 else 1
+        y_rand = random.randint(1,self.h-2) * present
+        x_rand = random.randint(1,self.w-2) * present
+        self.images[n, :, y_rand, x_rand] = label
+
+        x1 = (x_rand-1) * present 
+        y1 = (y_rand-1) * present
+        x2 = (x_rand+1) * present
+        y2 = (y_rand+1) * present
+
+        target[n, n_class, 0] = present
+        target[n, n_class, 1] = label
+        target[n, n_class, 2] = x1
+        target[n, n_class, 3] = y1
+        target[n, n_class, 4] = x2
+        target[n, n_class, 5] = y2
+
+        if present:
+          self.images[n, :, y1:y1+1, x1:x2+1] = 10
+          self.images[n, :, y2:y2+1, x1:x2+1] = 10
+          self.images[n, :, y1:y2+1, x1:x1+1] = 10
+          self.images[n, :, y1:y2+1, x2:x2+1] = 10
+
+    return self.images, target      
 
 def gen_xy(images, target, test_percent, val_percent):
   main_size = images.size(0)
@@ -146,46 +143,31 @@ def gen_xy(images, target, test_percent, val_percent):
   return (train_x,train_y,val_x, val_y,test_x,test_y)
 
 
-def gen_rand_coords(num_samples, h, w): # -> coords.shape = (sz, 4)
-  h -= 1
-  w -= 1
-  coords = torch.zeros(num_samples, 4).to(torch.int32)
-  for sample in range(num_samples):
-    coords[sample, 0:1] = random.randint(0,w-2)
-    coords[sample, 1:2] = random.randint(0,h-2)
-    coords[sample, 2:3] = random.randint(int((coords[sample,0]+2).item()), w)
-    coords[sample, 3:4] = random.randint(int((coords[sample,1]+2).item()), h)
-
-  return coords
-
-
 def main():
-  w, h = (7, 7)  
-  num_samples = 400
-  percent_val = 20
-  percent_test = 10 
-  num_classes = 2
+  size_val, size_test = (20, 10) # %20 валидации %10 тестовой
+  h, w = (7, 7)  
 
-  class_id = torch.round(torch.round(torch.rand((num_samples, 1)) * num_classes + 0)).to(torch.int32)
-  coords = gen_rand_coords(num_samples, w, h)
-  target = torch.cat([class_id, coords], dim=1)
-  images = torch.zeros(num_samples, 3, h, w)
+  batch_size = 600
+  labels = 2
 
-  box_image = Bbox(num_samples, coords, images)
-  images = box_image.draw_bbox(min_shades=1,max_shades=1)
+  images = torch.zeros(batch_size, 3, w,h)
+  box = Bbox(images)
+  images, target = box.draw_boxes(labels)
 
-  target = target.to(torch.float32)
+  # print(target.shape)
+  # print(images.shape)
+  # print(target[0])
+  # print(images[0, 0])
 
-  train_x, train_y, val_x, val_y, test_x, test_y = gen_xy(images, target, percent_val, percent_test)
+  train_x, train_y, val_x, val_y, test_x, test_y = gen_xy(images, target, size_val, size_test)
   train_loader = data.DataLoader(dataset = SetClassBoxes(train_x, train_y), batch_size=64, shuffle=True)
   val_loader = data.DataLoader(dataset = SetClassBoxes(val_x, val_y), batch_size=32, shuffle=True)
   test_loader = data.DataLoader(dataset = SetClassBoxes(test_x, test_y), batch_size=32, shuffle=False)
 
-  model = ModelLastLayer(images.size(1)*images.size(2)*images.size(3), 5)    
+  model = ModelLastLayer(images.size(1)*images.size(2)*images.size(3), 6*labels)    
   criterion = BboxLoss_withMSE()
   optimizer = torch.optim.Adam(params=model.parameters(), lr=0.0001)
-  num_ep = 1000
-
+  num_ep = 2000
 
 
   print("ОБУЧЕНИЕ & ВАЛИДАЦИЯ\n")
@@ -195,7 +177,7 @@ def main():
 
     model.train()
     for x, y in train_loader:
-      pred = model(x)
+      pred = model(x).reshape(-1, 2, 6)
       loss = criterion(pred, y)
       # if _ep % 1000 == 0:
         # print(f'pred:\n{pred}, y:\n{y}\nloss = {loss}')
@@ -208,7 +190,7 @@ def main():
     with torch.no_grad():
       model.eval() 
       for x, y in val_loader:
-        pred = model(x)
+        pred = model(x).reshape(-1, 2, 6)
         loss_val += criterion(pred, y).item()
         v_cnt += 1
 
@@ -217,7 +199,7 @@ def main():
       loss_mean_val = loss_val / v_cnt
       print(f'ep [{_ep}/{num_ep}] \t\t LOSS TRAIN {loss_mean_train} \t\t LOSS VAL {loss_mean_val}')
       
-  print("\nТЕСТ")
+  print("\nТЕСТ") 
   model.eval()
 
   losses = 0 
@@ -227,20 +209,12 @@ def main():
   
   with torch.no_grad():
     for x,y in test_loader:
-      pred=model(x)
+      pred=model(x).reshape(-1, 2, 6)
       loss=criterion(pred, y)
 
       if patience > 0:
-        print(f'рамка в координатах = {torch.round(pred[0,1:]).tolist()} \t target = {torch.round(y[0,1:]).tolist()}')
-
-        box_image = Bbox(1, pred[:, 1:], x) # без учета класса
-        pred_image = box_image.draw_bbox(1,1)
-        print(f'модель нарисоваола:\n{pred_image[0][0]}') 
-
-        box_image = Bbox(1,y[:,1:], x) # без учета класса
-        y_image = box_image.draw_bbox(1,1)
-        print(f'\nкак верно:\n{y_image[0][0]}')        
-
+        print(f'predision:\n{pred[0]}')
+        print(f'y:\n{y[0]}')
         patience -= 1
 
       losses += loss.item()
