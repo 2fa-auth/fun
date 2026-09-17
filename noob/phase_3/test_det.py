@@ -1,14 +1,7 @@
 import torch
 
-import det
+x = torch.tensor([[1., 2., 4., 2., 6., 4.],
+                  [1., 2., 1., 0., 3., 2.]])
 
-model = det.ModelLastLayer()
-
-coords = det.gen_rand_coords(50, 7,7)
-
-
-
-
-
-
-
+values, indices = torch.sort(x, dim=0)
+print(values)

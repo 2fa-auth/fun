@@ -8,8 +8,6 @@ import math
 import copy
 import random
 
-
-
 class SetClassBoxes(data.Dataset): 
   def __init__(self, images, target):
     super().__init__()
@@ -44,7 +42,6 @@ class ModelLastLayer(nn.Module):
     out = self.relu(self.bn3(self.fc3(out)))
     out = self.fc4(out)
     return out
-  
 
 class BboxLoss_withMSE:
   def IoU(self, box1, box2):
@@ -57,12 +54,22 @@ class BboxLoss_withMSE:
     y1_box2 = torch.min(box2[...,3:4], box2[..., 5:6]) 
     x2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
     y2_box2 = torch.max(box2[..., 5:6], box2[..., 3:4])
+    """
+    x1_box1 = torch.min(box1[2:3], box1[ 4:5])
+    y1_box1 = torch.min(box1[3:4], box1[ 5:6]) 
+    x2_box1 = torch.max(box1[ 4:5], box1[ 2:3])
+    y2_box1 = torch.max(box1[ 5:6], box1[3:4])
 
+    x1_box2 = torch.min(box2[ 2:3], box2[ 4:5])
+    y1_box2 = torch.min(box2[3:4], box2[ 5:6]) 
+    x2_box2 = torch.max(box2[ 4:5], box2[ 2:3])
+    y2_box2 = torch.max(box2[ 5:6], box2[ 3:4])
+    """
     x1_box = torch.max(x1_box1, x1_box2)
     y1_box = torch.max(y1_box1, y1_box2)
     x2_box = torch.min(x2_box1, x2_box2)
     y2_box = torch.min(y2_box1, y2_box2)
-
+    
     width = torch.clamp(x2_box - x1_box, 0)
     height = torch.clamp(y2_box - y1_box, 0)
 
@@ -74,16 +81,21 @@ class BboxLoss_withMSE:
 
     return intersection_area / (union_area + 1e-6)
 
-  def __call__(self, pred, y):
+  def __call__(self, pred, y, iou_print=0):
     criterion = nn.MSELoss()
 
-    iou_loss = self.IoU(pred, y)
-    coords_loss = criterion(pred, y)
+    present = pred[..., 0].unsqueeze(-1)
 
-    iou_loss = 1 - iou_loss
-    loss_class = criterion(y[..., 0], pred[..., 0])
+    present_loss = criterion(pred[..., 0:1], y[..., 0:1])
+    class_loss = (criterion(pred[..., 1:2], y[..., 1:2])) * present
 
-    return (loss_class + iou_loss + coords_loss).mean()
+    iou_loss = (1 - self.IoU(pred, y)) * present
+
+    if iou_print:
+      print(f"IOU LOSS: {iou_loss}")
+    coords_loss = (criterion(pred[:, :, 2:], y[:, :, 2:])) * present
+
+    return (iou_loss + coords_loss + class_loss + present_loss).mean()
 
 
 class Bbox:
@@ -124,6 +136,8 @@ class Bbox:
           self.images[n, :, y1:y2+1, x1:x1+1] = 10
           self.images[n, :, y1:y2+1, x2:x2+1] = 10
 
+    order = torch.argsort(target[:, :, 2], dim=1)
+    target = target.gather(1, order.unsqueeze(-1).expand_as(target))
     return self.images, target      
 
 def gen_xy(images, target, test_percent, val_percent):
@@ -144,20 +158,16 @@ def gen_xy(images, target, test_percent, val_percent):
 
 
 def main():
-  size_val, size_test = (20, 10) # %20 валидации %10 тестовой
+  size_val, size_test = (20, 10)
   h, w = (7, 7)  
 
-  batch_size = 600
+  batch_size = 700
   labels = 2
 
   images = torch.zeros(batch_size, 3, w,h)
   box = Bbox(images)
   images, target = box.draw_boxes(labels)
 
-  # print(target.shape)
-  # print(images.shape)
-  # print(target[0])
-  # print(images[0, 0])
 
   train_x, train_y, val_x, val_y, test_x, test_y = gen_xy(images, target, size_val, size_test)
   train_loader = data.DataLoader(dataset = SetClassBoxes(train_x, train_y), batch_size=64, shuffle=True)
@@ -178,6 +188,9 @@ def main():
     model.train()
     for x, y in train_loader:
       pred = model(x).reshape(-1, 2, 6)
+      order = torch.argsort(pred[:, :, 2], dim=1)
+      pred = pred.gather(1, order.unsqueeze(-1).expand_as(pred))
+
       loss = criterion(pred, y)
       # if _ep % 1000 == 0:
         # print(f'pred:\n{pred}, y:\n{y}\nloss = {loss}')
@@ -191,6 +204,8 @@ def main():
       model.eval() 
       for x, y in val_loader:
         pred = model(x).reshape(-1, 2, 6)
+        order = torch.argsort(pred[:,:,2], dim=1)
+        pred = pred.gather(1,order.unsqueeze(-1).expand_as(pred))
         loss_val += criterion(pred, y).item()
         v_cnt += 1
 
@@ -210,12 +225,15 @@ def main():
   with torch.no_grad():
     for x,y in test_loader:
       pred=model(x).reshape(-1, 2, 6)
-      loss=criterion(pred, y)
+      order = torch.argsort(pred[:,:,2], dim=1)
+      pred = pred.gather(1, order.unsqueeze(-1).expand_as(pred))
+
+      loss=criterion(pred, y, iou_print=1)
 
       if patience > 0:
-        print(f'predision:\n{pred[0]}')
-        print(f'y:\n{y[0]}')
-        patience -= 1
+        # print(f'predision:\n{torch.round(pred[0])}')
+        # print(f'y:\n{torch.round(y[0])}')
+        patience -= 1      
 
       losses += loss.item()
       l_cnt +=1
