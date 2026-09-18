@@ -54,17 +54,7 @@ class BboxLoss_withMSE:
     y1_box2 = torch.min(box2[...,3:4], box2[..., 5:6]) 
     x2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
     y2_box2 = torch.max(box2[..., 5:6], box2[..., 3:4])
-    """
-    x1_box1 = torch.min(box1[2:3], box1[ 4:5])
-    y1_box1 = torch.min(box1[3:4], box1[ 5:6]) 
-    x2_box1 = torch.max(box1[ 4:5], box1[ 2:3])
-    y2_box1 = torch.max(box1[ 5:6], box1[3:4])
 
-    x1_box2 = torch.min(box2[ 2:3], box2[ 4:5])
-    y1_box2 = torch.min(box2[3:4], box2[ 5:6]) 
-    x2_box2 = torch.max(box2[ 4:5], box2[ 2:3])
-    y2_box2 = torch.max(box2[ 5:6], box2[ 3:4])
-    """
     x1_box = torch.max(x1_box1, x1_box2)
     y1_box = torch.max(y1_box1, y1_box2)
     x2_box = torch.min(x2_box1, x2_box2)
@@ -81,19 +71,18 @@ class BboxLoss_withMSE:
 
     return intersection_area / (union_area + 1e-6)
 
-  def __call__(self, pred, y, iou_print=0):
+  def __call__(self, pred, y):
     criterion = nn.MSELoss()
 
-    present = pred[..., 0].unsqueeze(-1)
+    present = y[..., 0].unsqueeze(-1)
 
     present_loss = criterion(pred[..., 0:1], y[..., 0:1])
-    class_loss = (criterion(pred[..., 1:2], y[..., 1:2])) * present
 
-    iou_loss = (1 - self.IoU(pred, y)) * present
+    pred *= present
+    class_loss = criterion(pred[..., 1:2], y[..., 1:2])
+    coords_loss = present * criterion(pred[..., 2:], y[..., 2:]) 
 
-    if iou_print:
-      print(f"IOU LOSS: {iou_loss}")
-    coords_loss = (criterion(pred[:, :, 2:], y[:, :, 2:])) * present
+    iou_loss = present *  (1 - self.IoU(pred, y))
 
     return (iou_loss + coords_loss + class_loss + present_loss).mean()
 
@@ -231,8 +220,8 @@ def main():
       loss=criterion(pred, y, iou_print=1)
 
       if patience > 0:
-        # print(f'predision:\n{torch.round(pred[0])}')
-        # print(f'y:\n{torch.round(y[0])}')
+        print(f'predision:\n{torch.round(pred[0])}')
+        print(f'y:\n{torch.round(y[0])}')
         patience -= 1      
 
       losses += loss.item()
