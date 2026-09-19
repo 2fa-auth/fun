@@ -72,19 +72,21 @@ class BboxLoss_withMSE:
     return intersection_area / (union_area + 1e-6)
 
   def __call__(self, pred, y):
-    criterion = nn.MSELoss()
-
     present = y[..., 0].unsqueeze(-1)
+    criterion = nn.MSELoss(reduction='none')
 
-    present_loss = criterion(pred[..., 0:1], y[..., 0:1])
+    present_loss = criterion(pred[..., 0:1], y[..., 0:1]).mean()
+    iou_loss = (present * (1 - self.IoU(pred, y))).mean()
 
-    pred *= present
-    class_loss = criterion(pred[..., 1:2], y[..., 1:2])
-    coords_loss = present * criterion(pred[..., 2:], y[..., 2:]) 
+    class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
+    coords_loss = (present * criterion(pred[..., 2:], y[..., 2:])).mean()
 
-    iou_loss = present *  (1 - self.IoU(pred, y))
-
-    return (iou_loss + coords_loss + class_loss + present_loss).mean()
+    return (
+      iou_loss + 
+      coords_loss + 
+      class_loss + 
+      present_loss
+    )
 
 
 class Bbox:
@@ -181,8 +183,6 @@ def main():
       pred = pred.gather(1, order.unsqueeze(-1).expand_as(pred))
 
       loss = criterion(pred, y)
-      # if _ep % 1000 == 0:
-        # print(f'pred:\n{pred}, y:\n{y}\nloss = {loss}')
 
       loss_train += loss.item()
       t_cnt += 1
@@ -201,7 +201,7 @@ def main():
     if _ep % 200 == 0:
       loss_mean_train = loss_train / t_cnt
       loss_mean_val = loss_val / v_cnt
-      print(f'ep [{_ep}/{num_ep}] \t\t LOSS TRAIN {loss_mean_train} \t\t LOSS VAL {loss_mean_val}')
+      print(f'ep [{_ep}/{num_ep}] \t LOSS TRAIN {loss_mean_train} \t LOSS VAL {loss_mean_val}')
       
   print("\nТЕСТ") 
   model.eval()
@@ -217,7 +217,7 @@ def main():
       order = torch.argsort(pred[:,:,2], dim=1)
       pred = pred.gather(1, order.unsqueeze(-1).expand_as(pred))
 
-      loss=criterion(pred, y, iou_print=1)
+      loss=criterion(pred, y)
 
       if patience > 0:
         print(f'predision:\n{torch.round(pred[0])}')
