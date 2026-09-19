@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn 
 import torch.utils.data as data
 
+# detector
+
 class SetClassBoxes(data.Dataset): 
   def __init__(self, images, target):
     super().__init__()
@@ -121,7 +123,6 @@ def fetch_subset(images, target, test_percent, val_percent):
 def main():
   size_val, size_test = (20, 10)
   h, w = (7, 7)  
-
   batch_size = 700
   labels = 2
 
@@ -178,7 +179,7 @@ def main():
       pred = pred.gather(1, order.unsqueeze(-1).expand_as(pred))
       loss=criterion(pred, y)
 
-      if patience > 0: print(f'predision:\n{torch.round(pred[0])}\ny:\n{torch.round(y[0])}'), patience -= 1      
+      if patience: print(f'predision:\n{torch.round(pred[0])}\ny:\n{torch.round(y[0])}'); patience -= 1      
       losses += loss.item()
       l_cnt +=1
     print(f"средняя ошибка модели после теста: {losses / l_cnt}")
