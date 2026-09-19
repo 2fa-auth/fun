@@ -1,12 +1,7 @@
 #!/home/client/Documents/fun/py/venv/bin/python3
 import torch
 import torch.nn as nn 
-import torchvision.models as models
 import torch.utils.data as data
-
-import math 
-import copy
-import random
 
 class SetClassBoxes(data.Dataset): 
   def __init__(self, images, target):
@@ -15,17 +10,12 @@ class SetClassBoxes(data.Dataset):
     self.target = target
     self.len = int(images.size(0))
 
-  def __len__(self):
-    return self.len
-
-  def __getitem__(self, index):
-    return (self.images[index], self.target[index])
-
+  def __len__(self): return self.len
+  def __getitem__(self, index): return (self.images[index], self.target[index])
 
 class ModelLastLayer(nn.Module): 
   def __init__(self, in_features, out_features):
     super().__init__()
-
     self.fc1 = nn.Linear(in_features, 128)
     self.bn1 = nn.BatchNorm1d(128)
     self.fc2 = nn.Linear(128, 512)
@@ -36,39 +26,26 @@ class ModelLastLayer(nn.Module):
     self.relu = nn.ReLU()
 
   def forward(self, x):
-    x = x.view(x.size(0), -1)
+    x = x.view(x.size(0), -1) # hacks
     out = self.relu(self.bn1(self.fc1(x)))
     out = self.relu(self.bn2(self.fc2(out)))
     out = self.relu(self.bn3(self.fc3(out)))
-    out = self.fc4(out)
-    return out
+    return self.fc4(out)
 
 class BboxLoss_withMSE:
   def IoU(self, box1, box2):
-    x1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5])
-    y1_box1 = torch.min(box1[...,3:4], box1[..., 5:6]) 
-    x2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3])
-    y2_box1 = torch.max(box1[..., 5:6], box1[...,3:4])
+    x1_box1, y1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5]), torch.min(box1[...,3:4], box1[..., 5:6]) 
+    x2_box1, y2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3]), torch.max(box1[..., 5:6], box1[...,3:4])
+    x1_box2, y1_box2 = torch.min(box2[..., 2:3], box2[..., 4:5]), torch.min(box2[...,3:4], box2[..., 5:6]) 
+    x2_box2, y2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3]), torch.max(box2[..., 5:6], box2[..., 3:4])
+    x1_box, y1_box = torch.max(x1_box1, x1_box2), torch.max(y1_box1, y1_box2)
+    x2_box, y2_box = torch.min(x2_box1, x2_box2), torch.min(y2_box1, y2_box2)
 
-    x1_box2 = torch.min(box2[..., 2:3], box2[..., 4:5])
-    y1_box2 = torch.min(box2[...,3:4], box2[..., 5:6]) 
-    x2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
-    y2_box2 = torch.max(box2[..., 5:6], box2[..., 3:4])
-
-    x1_box = torch.max(x1_box1, x1_box2)
-    y1_box = torch.max(y1_box1, y1_box2)
-    x2_box = torch.min(x2_box1, x2_box2)
-    y2_box = torch.min(y2_box1, y2_box2)
-    
-    width = torch.clamp(x2_box - x1_box, 0)
-    height = torch.clamp(y2_box - y1_box, 0)
-
-    width_box1, height_box1 = x2_box1 - x1_box1, y2_box1 - y1_box1
-    width_box2, height_box2 = x2_box2 - x1_box2, y2_box2 - y1_box2
-    intersection_area = width * height
-    box1_area, box2_area = width_box1 * height_box1, width_box2 * height_box2
-    union_area = box1_area + box2_area - intersection_area
-
+    intersection_area = torch.clamp(x2_box - x1_box, 0) * torch.clamp(y2_box - y1_box, 0)
+    wbox1, hbox1 = x2_box1 - x1_box1, y2_box1 - y1_box1
+    wbox2, hbox2 = x2_box2 - x1_box2, y2_box2 - y1_box2
+    area_box1, area_box2 = wbox1 * hbox1, wbox2 * hbox2
+    union_area = area_box1 + area_box2 - intersection_area
     return intersection_area / (union_area + 1e-6)
 
   def __call__(self, pred, y):
@@ -77,17 +54,10 @@ class BboxLoss_withMSE:
 
     present_loss = criterion(pred[..., 0:1], y[..., 0:1]).mean()
     iou_loss = (present * (1 - self.IoU(pred, y))).mean()
-
     class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
     coords_loss = (present * criterion(pred[..., 2:], y[..., 2:])).mean()
 
-    return (
-      iou_loss + 
-      coords_loss + 
-      class_loss + 
-      present_loss
-    )
-
+    return (iou_loss + coords_loss + class_loss + present_loss)
 
 class Bbox:
   def __init__(self, images):
@@ -99,6 +69,7 @@ class Bbox:
     self.wbox = 3
 
   def draw_boxes(self, labels):
+    import random
     target = torch.zeros(self.batch_size, labels, 6)
 
     for n in range(self.batch_size):
@@ -131,7 +102,7 @@ class Bbox:
     target = target.gather(1, order.unsqueeze(-1).expand_as(target))
     return self.images, target      
 
-def gen_xy(images, target, test_percent, val_percent):
+def fetch_subset(images, target, test_percent, val_percent):
   main_size = images.size(0)
   train_percent = 100 - (test_percent + val_percent)   
 
@@ -147,7 +118,6 @@ def gen_xy(images, target, test_percent, val_percent):
 
   return (train_x,train_y,val_x, val_y,test_x,test_y)
 
-
 def main():
   size_val, size_test = (20, 10)
   h, w = (7, 7)  
@@ -159,17 +129,15 @@ def main():
   box = Bbox(images)
   images, target = box.draw_boxes(labels)
 
-
-  train_x, train_y, val_x, val_y, test_x, test_y = gen_xy(images, target, size_val, size_test)
-  train_loader = data.DataLoader(dataset = SetClassBoxes(train_x, train_y), batch_size=64, shuffle=True)
-  val_loader = data.DataLoader(dataset = SetClassBoxes(val_x, val_y), batch_size=32, shuffle=True)
-  test_loader = data.DataLoader(dataset = SetClassBoxes(test_x, test_y), batch_size=32, shuffle=False)
+  X_train, Y_train, X_val, Y_val, X_test, Y_test = fetch_subset(images, target, size_val, size_test)
+  train_loader = data.DataLoader(dataset = SetClassBoxes(X_train, Y_train), batch_size=64, shuffle=True)
+  val_loader = data.DataLoader(dataset = SetClassBoxes(X_val, Y_val), batch_size=32, shuffle=True)
+  test_loader = data.DataLoader(dataset = SetClassBoxes(X_test, Y_test), batch_size=32, shuffle=False)
 
   model = ModelLastLayer(images.size(1)*images.size(2)*images.size(3), 6*labels)    
   criterion = BboxLoss_withMSE()
   optimizer = torch.optim.Adam(params=model.parameters(), lr=0.0001)
   num_ep = 2000
-
 
   print("ОБУЧЕНИЕ & ВАЛИДАЦИЯ\n")
   for _ep in range(num_ep):
@@ -197,40 +165,25 @@ def main():
         pred = pred.gather(1,order.unsqueeze(-1).expand_as(pred))
         loss_val += criterion(pred, y).item()
         v_cnt += 1
-
-    if _ep % 200 == 0:
-      loss_mean_train = loss_train / t_cnt
-      loss_mean_val = loss_val / v_cnt
-      print(f'ep [{_ep}/{num_ep}] \t LOSS TRAIN {loss_mean_train} \t LOSS VAL {loss_mean_val}')
+    if _ep % 200 == 0: print(f'ep [{_ep}/{num_ep}] \t LOSS TRAIN {loss_train / t_cnt} \t LOSS VAL {loss_val / v_cnt}')
       
   print("\nТЕСТ") 
   model.eval()
-
-  losses = 0 
-  l_cnt = 0
-
+  losses, l_cnt =0, 0
   patience = 4
-  
   with torch.no_grad():
     for x,y in test_loader:
       pred=model(x).reshape(-1, 2, 6)
       order = torch.argsort(pred[:,:,2], dim=1)
       pred = pred.gather(1, order.unsqueeze(-1).expand_as(pred))
-
       loss=criterion(pred, y)
 
-      if patience > 0:
-        print(f'predision:\n{torch.round(pred[0])}')
-        print(f'y:\n{torch.round(y[0])}')
-        patience -= 1      
-
+      if patience > 0: print(f'predision:\n{torch.round(pred[0])}\ny:\n{torch.round(y[0])}'), patience -= 1      
       losses += loss.item()
       l_cnt +=1
     print(f"средняя ошибка модели после теста: {losses / l_cnt}")
 
   torch.save(model.state_dict(), 'model_params.pth.tar')
-
-
 
 if __name__ == "__main__":
   main()
