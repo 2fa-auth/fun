@@ -59,6 +59,13 @@ class BboxLoss_withMSE:
     class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
     coords_loss = (present * criterion(pred[..., 2:], y[..., 2:])).mean()
 
+    zero_coords = criterion(pred[..., 2:], y[..., 2:]).mean()
+
+    print(pred[0])
+    print(y[0])
+
+
+    exit(0)
     return (iou_loss + coords_loss + class_loss + present_loss)
 
 class Bbox:
@@ -70,67 +77,99 @@ class Bbox:
     self.hbox = 3
     self.wbox = 3
 
-  def draw_boxes(self, labels):
+  def draw_boxes(self, labels, max_labels=2):
     import random
-    target = torch.zeros(self.batch_size, labels, 6)
 
-    for n in range(self.batch_size):
+    target = torch.zeros(self.batch_size, max_labels, 6)
+    for b in range(self.batch_size):
       for n_class in range(2):
-        label = random.randint(0,labels)
+        label = random.randint(0, labels)
         present = 0 if label == 0 else 1
         y_rand = random.randint(1,self.h-2) * present
         x_rand = random.randint(1,self.w-2) * present
-        self.images[n, :, y_rand, x_rand] = label
+        self.images[b, :, y_rand, x_rand] = label
 
         x1 = (x_rand-1) * present 
         y1 = (y_rand-1) * present
         x2 = (x_rand+1) * present
         y2 = (y_rand+1) * present
 
-        target[n, n_class, 0] = present
-        target[n, n_class, 1] = label
-        target[n, n_class, 2] = x1
-        target[n, n_class, 3] = y1
-        target[n, n_class, 4] = x2
-        target[n, n_class, 5] = y2
+        target[b, n_class, 0] = present
+        target[b, n_class, 1] = label
+        target[b, n_class, 2] = x1
+        target[b, n_class, 3] = y1
+        target[b, n_class, 4] = x2
+        target[b, n_class, 5] = y2
 
         if present:
-          self.images[n, :, y1:y1+1, x1:x2+1] = 10
-          self.images[n, :, y2:y2+1, x1:x2+1] = 10
-          self.images[n, :, y1:y2+1, x1:x1+1] = 10
-          self.images[n, :, y1:y2+1, x2:x2+1] = 10
+          self.images[b, :, y1:y1+1, x1:x2+1] = 10
+          self.images[b, :, y2:y2+1, x1:x2+1] = 10
+          self.images[b, :, y1:y2+1, x1:x1+1] = 10
+          self.images[b, :, y1:y2+1, x2:x2+1] = 10
 
     order = torch.argsort(target[:, :, 2], dim=1)
     target = target.gather(1, order.unsqueeze(-1).expand_as(target))
-    return self.images, target      
+    """ # реализует target в зависящий от конкретного количества объектов на изображении
+    [
+      [[]],[[]],[[]] shape = batch_size, 3, 7
+      [[]]       shape = batch_size, 1, 7
+      ..batch_size
+    ]
+
+
+    target = []
+
+    for img in range(self.batch_size):
+      target.append([])
+      amount_labels = random.randint(min_labels, max_labels)
+      if not amount_labels: target[img] = [[el*0 for el in range(0,6)]]
+      else:
+        for _ in range(amount_labels):
+          label = random.randint(1, labels)
+          Y_rand = random.randint(1,self.h-2)
+          X_rand = random.randint(1,self.w-2)
+          self.images[img, :, Y_rand, X_rand] = label
+          x1, y1 = X_rand-1, Y_rand-1
+          x2, y2 = X_rand+1, Y_rand+1
+
+          target[img].append([1, label, x1, y1, x2, y2])
+
+          self.images[img, :, y1:y1+1, x1:x2+1] = 10
+          self.images[img, :, y2:y2+1, x1:x2+1] = 10
+          self.images[img, :, y1:y2+1, x1:x1+1] = 10
+          self.images[img, :, y1:y2+1, x2:x2+1] = 10
+
+    # print(self.images[0,0])
+    # print(target[0])
+    """
+    
+    order = torch.argsort(target[:, :, 2], dim=1)
+    return self.images, target.gather(1, order.unsqueeze(-1).expand_as(target))      
 
 def fetch_subset(images, target, test_percent, val_percent):
   main_size = images.size(0)
-  train_percent = 100 - (test_percent + val_percent)   
+  train_percent = 100 - (test_percent + val_percent)
 
   train_size = int(main_size * train_percent / 100)
   val_size = int(main_size * val_percent / 100)
 
-  train_x = images[:train_size, ...]
-  train_y = target[:train_size, ...]
-  val_x = images[train_size:train_size+val_size, ...]
-  val_y = target[train_size:train_size+val_size, ...]
-  test_x = images[train_size+val_size:, ...]
-  test_y = target[train_size+val_size:,...]
-
-  return (train_x,train_y,val_x, val_y,test_x,test_y)
+  return (images[:train_size], target[:train_size], # TRAIN
+          images[train_size:train_size+val_size], target[train_size:train_size+val_size], # VALIDATION
+          images[train_size+val_size:], target[train_size+val_size:]) # TEST
 
 def main():
   size_val, size_test = (20, 10)
   h, w = (7, 7)  
-  batch_size = 700
+  batch_size = 1000
   labels = 2
 
   images = torch.zeros(batch_size, 3, w,h)
   box = Bbox(images)
-  images, target = box.draw_boxes(labels)
+  images, target = box.draw_boxes(labels) # до 2 включительно
+  print(images.shape, target.shape)
 
   X_train, Y_train, X_val, Y_val, X_test, Y_test = fetch_subset(images, target, size_val, size_test)
+
   train_loader = data.DataLoader(dataset = SetClassBoxes(X_train, Y_train), batch_size=64, shuffle=True)
   val_loader = data.DataLoader(dataset = SetClassBoxes(X_val, Y_val), batch_size=32, shuffle=True)
   test_loader = data.DataLoader(dataset = SetClassBoxes(X_test, Y_test), batch_size=32, shuffle=False)
@@ -170,7 +209,7 @@ def main():
       
   print("\nТЕСТ") 
   model.eval()
-  losses, l_cnt =0, 0
+  losses, l_cnt = 0, 0
   patience = 4
   with torch.no_grad():
     for x,y in test_loader:

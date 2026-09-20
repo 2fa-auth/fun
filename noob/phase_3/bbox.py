@@ -20,7 +20,7 @@ if __name__ == "__main__":
   if not num_labels: target += ((0, 0, 0, 0, 0, 0, 0),)
   else:
     for _ in range(num_labels): # спавн рандомного количества объектов 
-      label = random.randint(0,labels)
+      label = random.randint(1,labels)
       y_rand = random.randint(1,h-2)
       x_rand = random.randint(1,w-2)
       image[:, y_rand, x_rand] = label
