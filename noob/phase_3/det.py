@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn 
 import torch.utils.data as data
 
-# detector
+# detector & 2 objects 
 
 class SetClassBoxes(data.Dataset): 
   def __init__(self, images, target):
@@ -59,13 +59,6 @@ class BboxLoss_withMSE:
     class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
     coords_loss = (present * criterion(pred[..., 2:], y[..., 2:])).mean()
 
-    zero_coords = criterion(pred[..., 2:], y[..., 2:]).mean()
-
-    print(pred[0])
-    print(y[0])
-
-
-    exit(0)
     return (iou_loss + coords_loss + class_loss + present_loss)
 
 class Bbox:
@@ -166,7 +159,6 @@ def main():
   images = torch.zeros(batch_size, 3, w,h)
   box = Bbox(images)
   images, target = box.draw_boxes(labels) # до 2 включительно
-  print(images.shape, target.shape)
 
   X_train, Y_train, X_val, Y_val, X_test, Y_test = fetch_subset(images, target, size_val, size_test)
 
