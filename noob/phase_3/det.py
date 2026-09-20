@@ -109,13 +109,13 @@ class Bbox:
 
     order = torch.argsort(target[:, :, 2], dim=1)
     target = target.gather(1, order.unsqueeze(-1).expand_as(target))
-    """ # реализует target в зависящий от конкретного количества объектов на изображении
-    [
-      [[]],[[]],[[]] shape = batch_size, 3, 7
-      [[]]       shape = batch_size, 1, 7
-      ..batch_size
-    ]
-
+    """ НЕТ ФИКСИРОВАННОГО КОЛИЧЕСТВА ОБЪЕКТОВ на изображении. 
+    пример работы:
+      [
+        [[]],[[]],[[]] shape = batch_size, 3, 7
+        [[]]       shape = batch_size, 1, 7
+        ..batch_size
+      ]
 
     target = []
 
