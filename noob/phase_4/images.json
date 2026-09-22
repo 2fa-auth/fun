@@ -1,0 +1,28 @@
+{
+  "images": [
+    {
+      "id": 1,
+      "file_name": "01.jpg",
+      "width": 640,
+      "height": 48
+    },
+    {
+      "id": 2,
+      "file_name": "02.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 3,
+      "file_name": "03.jpg",
+      "width": 16,
+      "height": 16
+    },
+    {
+      "id": 4,
+      "file_name": "04.jpg",
+      "width": 720,
+      "height": 48
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+    "annotations": [
+      {
+        "id": 1,
+        "image_id": 1,
+        "category_id": 1,
+        "bbox": [100, 12, 150, 30]
+      },
+      {
+        "id": 2,
+        "image_id": 1,
+        "category_id": 2,
+        "bbox": [10, 38, 170, 10]
+      },
+      {
+        "id": 3,
+        "image_id": 2,
+        "category_id": 2,
+        "bbox": [50, 25, 170, 23] 
+      },
+      {
+        "id": 4,
+        "image_id": 2,
+        "category_id": 2,
+        "bbox": [10, 21, 170, 8]
+      },
+      {
+        "id": 5,
+        "image_id": 3,
+        "category_id": 1,
+        "bbox": [30, 5, 12, 10] 
+      },
+      {
+        "id": 6,
+        "image_id": 3,
+        "category_id": 1,
+        "bbox": [500, 20, 120, 15]
+      },
+      {
+        "id": 7,
+        "image_id": 4,
+        "category_id": 2,
+        "bbox": [1, 2, 5, 7]
+      }
+    ]
+}
