@@ -26,7 +26,6 @@ class SetNoob(data.Dataset):
     image = os.path.join(self.images, image)
     return (image, targets)
 
-
 if __name__ == "__main__":
   train_set = SetNoob("./", "coco8", train=True)
   val_set = SetNoob("./", "coco8", train=False)
