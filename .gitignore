@@ -24,4 +24,3 @@ outputs/
 checkpoints/
 wandb/
 EOF
-resumetto_phone_mvp/
