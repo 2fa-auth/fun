@@ -2,10 +2,7 @@
 import torch
 import torch.utils.data as data
 import torchvision.transforms.v2 as v2
-
-
 import os
-from PIL import Image 
 
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
@@ -20,8 +17,8 @@ class SetNoob(data.Dataset):
     return len(self.imgs_list)    
 
   def __getitem__(self, index):
-    image = self.imgs_list[index]
-    targets = []
+    from PIL import Image 
+    image, targets = self.imgs_list[index],[]
 
     for label in self.lbs_list:
       if label.split('.')[0] == image.split('.')[0]:
@@ -30,19 +27,16 @@ class SetNoob(data.Dataset):
           ts.pop() if not ts[-1] else None
           for t in ts: targets.append([float(val) for val in t.split(' ')])
     
-    for t in targets:
+    for t in targets: #cxcywh -> x1y1x2y2
       x1 = t[-4] - t[-2] / 2 
       y1 = t[-3] - t[-1] / 2
       x2 = t[-4] + t[-2] / 2
       y2 = t[-3] + t[-1] / 2
-      t[-4] = x1
-      t[-3] = y1
-      t[-2] = x2
-      t[-1] = y2
+      t[-4], t[-3], t[-2], t[-1] = x1, y1, x2, y2
 
     image = Image.open(os.path.join(self.images, image)).convert('RGB')
-    if self.transforms:
-      image, targets = self.transforms(image, targets)
+    if self.transforms: image, targets = self.transforms(image, targets)
+
     return (image, targets)
 
 def def_call(batch):
