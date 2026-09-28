@@ -18,25 +18,41 @@ class SetNoob(data.Dataset):
 
   def __getitem__(self, index):
     from PIL import Image 
-    image, targets = self.imgs_list[index],[]
-
+    from torchvision.tv_tensors import BoundingBoxes
+    image = self.imgs_list[index]
+    targets = []
+    
     for label in self.lbs_list:
       if label.split('.')[0] == image.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
           ts = f.read().split('\n')
-          ts.pop() if not ts[-1] else None
-          for t in ts: targets.append([float(val) for val in t.split(' ')])
-    
-    for t in targets: #cxcywh -> x1y1x2y2
-      x1 = t[-4] - t[-2] / 2 
-      y1 = t[-3] - t[-1] / 2
-      x2 = t[-4] + t[-2] / 2
-      y2 = t[-3] + t[-1] / 2
-      t[-4], t[-3], t[-2], t[-1] = x1, y1, x2, y2
+          for t in ts: 
+            ar = []
+            for val in t.split(' '):
+              if val != '': ar.append(float(val))
+            if ar: targets.append(ar)
+    targets = torch.tensor(targets)
 
     image = Image.open(os.path.join(self.images, image)).convert('RGB')
-    if self.transforms: image, targets = self.transforms(image, targets)
+    w, h = image.size
+    if self.transforms: 
+      bbox = targets[:, 1:].clone().detach()
 
+      x1 = bbox[:, 0] - bbox[:, 2] / 2 
+      y1 = bbox[:, 1] - bbox[:, 3] / 2
+      x2 = bbox[:, 0] + bbox[:, 2] / 2
+      y2 = bbox[:, 1] + bbox[:, 3] / 2
+      bbox[:, 0] = x1 * w 
+      bbox[:, 1] = y1 * h
+      bbox[:, 2] = x2 * w
+      bbox[:, 3] = y2 * h
+
+      bbox = BoundingBoxes(data=bbox, format='XYXY', canvas_size=(h, w))
+      image, bbox = self.transforms(image, bbox)
+
+      targets[:, 1:] = bbox
+
+    exit(0)
     return (image, targets)
 
 def def_call(batch):
@@ -45,8 +61,6 @@ def def_call(batch):
   targets = [target for _, target in batch]
 
   return images, targets
-
-
 
 if __name__ == "__main__":
   transforms = v2.Compose([
@@ -80,4 +94,3 @@ if __name__ == "__main__":
         for cat in cats: 
           if cat['id'] == annot['category_id']: print(f'cat: {cat['name']}')                                                       
   """  
-
