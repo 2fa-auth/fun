@@ -1,6 +1,7 @@
-#!/home/client/Documents/fun/py/venv/bin/python3
+#!/home/client/Documents/fun/venv/bin/python3
 
-# разминка
+
+# пример 10 картинок
 
 if __name__ == "__main__":
   import random
