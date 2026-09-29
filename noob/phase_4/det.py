@@ -3,7 +3,7 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms.v2 as v2
 from torchvision.tv_tensors import BoundingBoxes
-
+import torch.nn as nn
 import os
 from PIL import Image 
 import cv2
@@ -83,6 +83,17 @@ def detection_objects(images, targets):
       cv2.rectangle(det_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
     view_image(det_image, 'rect') # показывает всего ОДНУ картинку из 'SetNoob'
 
+class NoobDetModel(nn.Module):
+  def __init__(self, in_dims, out_dims):
+    super().__init__(self)
+
+    self.fc1 = nn.Linear(in_dims, 256)
+    self.fc2 = nn.Linear(256, out_dims)
+    self.sigmoid = nn.Sigmoid()
+
+  def forward(self):
+    pass
+
 def main():
   transforms = v2.Compose([
     v2.Resize((224, 224)),
@@ -93,12 +104,14 @@ def main():
   train_set = SetNoob("./", "coco8", train=True, transforms=transforms)
   val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
 
-  train_loader = data.DataLoader(dataset=train_set, batch_size=1, collate_fn=def_call, shuffle=False)
+  train_loader = data.DataLoader(dataset=train_set, batch_size=2, collate_fn=def_call, shuffle=False)
   val_loader = data.DataLoader(dataset=val_set, batch_size=1, shuffle=False)  
-
+  
   for images, targets in train_loader:
     detection_objects(images, targets)
-  
+
+
+
 
 if __name__ == "__main__":
   main()
