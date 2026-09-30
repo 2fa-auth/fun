@@ -4,6 +4,7 @@ import torch.utils.data as data
 import torchvision.transforms.v2 as v2
 from torchvision.tv_tensors import BoundingBoxes
 import torch.nn as nn
+from torch.optim import Adam
 import os
 from PIL import Image 
 import cv2
@@ -15,16 +16,20 @@ class SetNoob(data.Dataset):
     self.labels = os.path.join(pathto_dset, namedset, "labels", "train" if train else "val")
     self.imgs_list = os.listdir(self.images)
     self.lbs_list = os.listdir(self.labels)
-
     self.transforms = transforms
+
+    self.batch_size = len(self.imgs_list)
+    self.target = torch.ones(self.batch_size, NUM_PREDICTIONS, NUM_CLASSES)
 
   def __len__(self): 
     return len(self.imgs_list)    
 
+
+    
   def __getitem__(self, index):
     image = self.imgs_list[index]
-    targets = []
     
+    targets = []
     for label in self.lbs_list:
       if label.split('.')[0] == image.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
@@ -34,8 +39,11 @@ class SetNoob(data.Dataset):
             for val in t.split(' '):
               if val != '': ar.append(float(val))
             if ar: targets.append(ar)
+
     targets = torch.tensor(targets)
 
+    print(targets)
+    
     image = Image.open(os.path.join(self.images, image)).convert('RGB')
     w, h = image.size
     if self.transforms: 
@@ -55,14 +63,16 @@ class SetNoob(data.Dataset):
 
       targets[:, 1:] = bbox
 
+    exit()
     return (image, targets)
 
+"""
 def def_call(batch):
   batch = [(image, target) for image, target in batch]
   images = [image for image, _ in batch]
   targets = [target for _, target in batch]
   return images, targets
-
+"""
 def view_image(image, name_widow):
   cv2.imshow(name_widow, image)
   cv2.waitKey(0) 
@@ -83,34 +93,104 @@ def detection_objects(images, targets):
       cv2.rectangle(det_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
     view_image(det_image, 'rect') # показывает всего ОДНУ картинку из 'SetNoob'
 
-class NoobDetModel(nn.Module):
-  def __init__(self, in_dims, out_dims):
-    super().__init__(self)
+"""
+input; picture ->     h, w, chann
+ouput; predicition -> 10, 85 
+  где в '85' входят; x1, y1, x2, y2, objectness_logit, class_logits
+"""
+class NootDetectionModel(nn.Module): 
+  def __init__(self, in_features, out_features):
+    super().__init__()
+    self.fc1 = nn.Linear(in_features, 128)
+    self.bn1 = nn.BatchNorm1d(128)
+    self.fc2 = nn.Linear(128, 512)
+    self.bn2 = nn.BatchNorm1d(512)
+    self.fc3 = nn.Linear(512, 256)
+    self.bn3 = nn.BatchNorm1d(256)
+    self.fc4 = nn.Linear(256, out_features)
+    self.relu = nn.ReLU()
 
-    self.fc1 = nn.Linear(in_dims, 256)
-    self.fc2 = nn.Linear(256, out_dims)
-    self.sigmoid = nn.Sigmoid()
+  def forward(self, x):
+    # x = x.view(x.size(0), -1) # hacks
+    out = self.relu(self.bn1(self.fc1(x)))
+    out = self.relu(self.bn2(self.fc2(out)))
+    out = self.relu(self.bn3(self.fc3(out)))
+    return self.fc4(out)
 
-  def forward(self):
-    pass
+NUM_CLASSES = 80     #датасет имеет 85 классов 
+NUM_PREDICTIONS = 10 #количество предсказаний
 
 def main():
+  H, W = (224, 224)
+  CHANS = 3
+  EPOCHS = 100
+
   transforms = v2.Compose([
-    v2.Resize((224, 224)),
+    v2.Resize((H, W)),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
   ])
 
   train_set = SetNoob("./", "coco8", train=True, transforms=transforms)
-  val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
+  # val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
 
-  train_loader = data.DataLoader(dataset=train_set, batch_size=2, collate_fn=def_call, shuffle=False)
-  val_loader = data.DataLoader(dataset=val_set, batch_size=1, shuffle=False)  
+  train_loader = data.DataLoader(dataset=train_set, batch_size=2, shuffle=False)
+  # val_loader = data.DataLoader(dataset=val_set, batch_size=1, shuffle=False)  
   
-  for images, targets in train_loader:
-    detection_objects(images, targets)
+  for images, targets in train_loader: # <== вывести изображения с рамками
+    # detection_objects(images, targets)
+    print(targets)
+    exit()
+  
+  in_dims_model = H * W * CHANS
+  out_dims_model = NUM_PREDICTIONS * (5 + NUM_CLASSES) #где 5 => [x1, y1, x2, y2, objectness]
+  model = NootDetectionModel(in_features=in_dims_model, out_features=out_dims_model)
+  criterion = nn.MSELoss()
+  optimizer = Adam(params=model.parameters(), lr=0.001)
+  
+  print("ОБУЧЕНИЕ && ВАЛИДАЦИЯ\n")
+  for _ep in range(EPOCHS):
+    train_avg_loss = 0
+    train_cnt_loss = 0
+    val_avg_loss = 0
+    val_cnt_loss = 0
+
+    model.train()
+    for images, targets in train_loader:
+      print(images)
+      exit()
+      # pred = model(images).reshape(-1, 10, 85)
+      pred = model(images)
+      print(pred.shape)
+      exit()
+
+      loss = criterion(pred, targets)
+      print(loss.shape)
+      exit()
+
+      train_avg_loss += loss.item()
+      train_cnt_loss += 1
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
+    with torch.no_grad():
+      model.eval()
+      for images, targets in val_loader:
+        print(images)
+        exit()
+        pred = model(images)
+
+        val_avg_loss += criterion(pred, targets)
+        val_cnt_loss += 1
+    
+    if _ep % 10 == 0: 
+      print(f'ep [{_ep}/{EPOCHS}] \t LOSS TRAIN {train_avg_loss / train_cnt_loss} \t LOSS VAL {val_avg_loss / val_cnt_loss}')
+
+  print("\nТЕСТ")
+  model.eval()
 
 
+  print(train_set[0])
 
 
 if __name__ == "__main__":
