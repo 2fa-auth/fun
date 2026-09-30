@@ -1,14 +1,16 @@
 #!/home/client/Documents/fun/venv/bin/python3
-import torch
 import torch.utils.data as data
 import torchvision.transforms.v2 as v2
 from torchvision.tv_tensors import BoundingBoxes
 import torch.nn as nn
 from torch.optim import Adam
+import torch
+
 import os
 from PIL import Image 
 import cv2
 import numpy as np
+import copy
 
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
@@ -18,18 +20,15 @@ class SetNoob(data.Dataset):
     self.lbs_list = os.listdir(self.labels)
     self.transforms = transforms
 
-    self.batch_size = len(self.imgs_list)
-    self.target = torch.ones(self.batch_size, NUM_PREDICTIONS, NUM_CLASSES)
-
   def __len__(self): 
     return len(self.imgs_list)    
 
-
-    
   def __getitem__(self, index):
     image = self.imgs_list[index]
+
+    target = torch.zeros((10, 85))
+    num_targs = 0
     
-    targets = []
     for label in self.lbs_list:
       if label.split('.')[0] == image.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
@@ -38,11 +37,14 @@ class SetNoob(data.Dataset):
             ar = []
             for val in t.split(' '):
               if val != '': ar.append(float(val))
-            if ar: targets.append(ar)
+            if ar: 
+              ar_target = copy.deepcopy(ar)
+              for i in range(len(ar)-1): 
+                ar_target[i] = ar[i+1]
+              ar_target[-1] = 1 if ar[0] > 0 else 0
 
-    targets = torch.tensor(targets)
-
-    print(targets)
+              for i in range(NUM_CLASSES): ar_target.append( 1 if i == ar[0] else 0 )
+              target[num_targs] = torch.tensor(ar_target).unsqueeze(0) ; num_targs += 1              
     
     image = Image.open(os.path.join(self.images, image)).convert('RGB')
     w, h = image.size
