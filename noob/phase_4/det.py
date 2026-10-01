@@ -24,13 +24,13 @@ class SetNoob(data.Dataset):
     return len(self.imgs_list)    
 
   def __getitem__(self, index):
-    image = self.imgs_list[index]
+    image_target = self.imgs_list[index]
 
-    target = torch.zeros((10, 85))
+    target = torch.zeros((NUM_PREDICTIONS, NUM_CLASSES+5))
     num_targs = 0
-    
+
     for label in self.lbs_list:
-      if label.split('.')[0] == image.split('.')[0]:
+      if label.split('.')[0] == image_target.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
           ts = f.read().split('\n')
           for t in ts: 
@@ -45,28 +45,28 @@ class SetNoob(data.Dataset):
 
               for i in range(NUM_CLASSES): ar_target.append( 1 if i == ar[0] else 0 )
               target[num_targs] = torch.tensor(ar_target).unsqueeze(0) ; num_targs += 1              
+
+    image_target = os.path.join(self.images, image_target)
+    image_target = Image.open(image_target).convert('RGB')
     
-    image = Image.open(os.path.join(self.images, image)).convert('RGB')
-    w, h = image.size
+    h, w = reversed(image_target.size) #for comfortable
+
     if self.transforms: 
-      bbox = targets[:, 1:].clone().detach()
+      bbox = target[:, :4].clone().detach() #bbox.shape = [10, 4], target.shape = [10, 85]
 
       x1 = bbox[:, 0] - bbox[:, 2] / 2 
       y1 = bbox[:, 1] - bbox[:, 3] / 2
       x2 = bbox[:, 0] + bbox[:, 2] / 2
       y2 = bbox[:, 1] + bbox[:, 3] / 2
-      bbox[:, 0] = x1 * w 
+      bbox[:, 0] = x1 * w
       bbox[:, 1] = y1 * h
       bbox[:, 2] = x2 * w
       bbox[:, 3] = y2 * h
 
       bbox = BoundingBoxes(data=bbox, format='XYXY', canvas_size=(h, w))
-      image, bbox = self.transforms(image, bbox)
+      image_target, target[:, :4] = self.transforms(image_target, bbox)
 
-      targets[:, 1:] = bbox
-
-    exit()
-    return (image, targets)
+    return (image_target, target)
 
 """
 def def_call(batch):
@@ -119,8 +119,8 @@ class NootDetectionModel(nn.Module):
     out = self.relu(self.bn3(self.fc3(out)))
     return self.fc4(out)
 
-NUM_CLASSES = 80     #датасет имеет 85 классов 
-NUM_PREDICTIONS = 10 #количество предсказаний
+NUM_CLASSES = 30
+NUM_PREDICTIONS = 10
 
 def main():
   H, W = (224, 224)
@@ -139,11 +139,13 @@ def main():
   train_loader = data.DataLoader(dataset=train_set, batch_size=2, shuffle=False)
   # val_loader = data.DataLoader(dataset=val_set, batch_size=1, shuffle=False)  
   
-  for images, targets in train_loader: # <== вывести изображения с рамками
-    # detection_objects(images, targets)
-    print(targets)
-    exit()
+  for x, y in train_loader: # <== вывести изображения с рамками
+    print(x)
+    print(y)
+    break
   
+  
+  exit()
   in_dims_model = H * W * CHANS
   out_dims_model = NUM_PREDICTIONS * (5 + NUM_CLASSES) #где 5 => [x1, y1, x2, y2, objectness]
   model = NootDetectionModel(in_features=in_dims_model, out_features=out_dims_model)
