@@ -10,8 +10,12 @@ import os
 from PIL import Image 
 import cv2
 import numpy as np
-import copy
+from copy import deepcopy
+from time import sleep
 
+# output: 
+#   x = [batch, 3, h, w]
+#   y = [batch, NUM_PREDICIONS, NUM_CLASSES]
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
     self.images = os.path.join(pathto_dset, namedset, "images", "train" if train else "val")
@@ -38,7 +42,7 @@ class SetNoob(data.Dataset):
             for val in t.split(' '):
               if val != '': ar.append(float(val))
             if ar: 
-              ar_target = copy.deepcopy(ar)
+              ar_target = deepcopy(ar)
               for i in range(len(ar)-1): 
                 ar_target[i] = ar[i+1]
               ar_target[-1] = 1 if ar[0] > 0 else 0
@@ -68,38 +72,37 @@ class SetNoob(data.Dataset):
 
     return (image_target, target)
 
-"""
+
+""" 
+# ручной collate_fn 
 def def_call(batch):
   batch = [(image, target) for image, target in batch]
   images = [image for image, _ in batch]
   targets = [target for _, target in batch]
   return images, targets
 """
+
 def view_image(image, name_widow):
   cv2.imshow(name_widow, image)
-  cv2.waitKey(0) 
-  cv2.destroyAllWindows()
 
-def detection_objects(images, targets):
-  for image, target in zip(images, targets):    
+# нарисовать прямоугольник в принимаемых координатах
+def detection_objects(x, y):
+  for image, target in zip(x, y):    
     image = image.permute(1, 2, 0).numpy() 
-    
+
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     det_image = image.copy()
 
-    for i in range(len(target)):
-      x1 = int(target[i, 1].item()) #pt1
-      y1 = int(target[i, 2].item()) #pt1
-      x2 = int(target[i, 3].item()) #pt2
-      y2 = int(target[i, 4].item()) #pt2
+    for t in target:
+      x1 = int(t[0].item()) #pt1
+      y1 = int(t[1].item()) #pt1
+      x2 = int(t[2].item()) #pt2
+      y2 = int(t[3].item()) #pt2
       cv2.rectangle(det_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
-    view_image(det_image, 'rect') # показывает всего ОДНУ картинку из 'SetNoob'
+      view_image(det_image, 'picture from COCO8')
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-"""
-input; picture ->     h, w, chann
-ouput; predicition -> 10, 85 
-  где в '85' входят; x1, y1, x2, y2, objectness_logit, class_logits
-"""
 class NootDetectionModel(nn.Module): 
   def __init__(self, in_features, out_features):
     super().__init__()
@@ -140,10 +143,8 @@ def main():
   # val_loader = data.DataLoader(dataset=val_set, batch_size=1, shuffle=False)  
   
   for x, y in train_loader: # <== вывести изображения с рамками
-    print(x)
-    print(y)
+    detection_objects(x, y)
     break
-  
   
   exit()
   in_dims_model = H * W * CHANS
