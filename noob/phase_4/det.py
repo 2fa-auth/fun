@@ -105,12 +105,12 @@ class NoobDetectionModel(nn.Module):
     out = self.relu(self.bn3(self.fc3(out)))
     return self.fc4(out)
 
-class ModelTrainer:
+class ModelTrainer: 
   def __init__(self, model, sets, lr=0.001):
-    self.model = model
+    self.dev = 'cuda' if torch.cuda.is_available else 'cpu'
+    self.model = model.to(self.dev)
     
     train_set, val_set, test_set = sets
-    
     self.train_loader = data.DataLoader(dataset=train_set, batch_size=4, shuffle=True)
     self.val_loader = data.DataLoader(dataset=val_set, batch_size=2, shuffle=False)  
     self.test_loader = data.DataLoader(dataset=test_set, batch_size=2, shuffle=False)
@@ -122,6 +122,9 @@ class ModelTrainer:
 
     losses = 0
     for x, y in self.train_loader:
+      x = x.to(self.dev)
+      y = y.to(self.dev)
+
       pred = self.model(x).reshape(-1, 10, 85)
       loss = self.criterion(pred, y)
 
@@ -136,6 +139,9 @@ class ModelTrainer:
     losses = 0
     with torch.no_grad():
       for x, y in self.val_loader:
+        x = x.to(self.dev)
+        y = y.to(self.dev)
+
         pred = self.model(x).reshape(-1, 10, 85)
         losses += self.criterion(pred, y).item()
     
@@ -145,8 +151,11 @@ class ModelTrainer:
     losses = 0
     with torch.no_grad():
       for x,y in self.test_loader:
+        x = x.to(self.dev)
+        y = y.to(self.dev)
+
         pred=self.model(x).reshape(-1, 10, 85)
-        loss +=self.criterion(pred, y).item()
+        losses += self.criterion(pred, y).item()
       
     return losses / len(self.test_loader)
 
