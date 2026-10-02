@@ -1,21 +1,35 @@
 #!/home/client/Documents/fun/venv/bin/python3
-import torch.utils.data as data
-import torchvision.transforms.v2 as v2
-from torchvision.tv_tensors import BoundingBoxes
-import torch.nn as nn
-from torch.optim import Adam
-import torch
-
 import os
-from PIL import Image 
-import cv2
-import numpy as np
 from copy import deepcopy
+from PIL import Image 
 from time import sleep
 
-# output: 
-#   x = [batch, 3, h, w]
-#   y = [batch, NUM_PREDICIONS, NUM_CLASSES]
+import torch
+from torch.optim import Adam
+from torchvision.tv_tensors import BoundingBoxes
+import torch.utils.data as data
+import torchvision.transforms.v2 as v2
+import torch.nn as nn
+
+import cv2
+import numpy as np
+
+
+"""
+model: 
+  input:  
+    x = [batch, 3, h, w]
+  output:  
+    y = [batch, NUM_PREDICIONS, NUM_CLASSES]
+"""
+
+NUM_CLASSES = 80 # количество классов
+NUM_PREDICTIONS = 10 # количество предсказанных bbox и проч. данных (таких как objectness, class)
+H = 224 # все изображения приводятся к этой высоте
+W = 224 # все изображения приводятся к этой ширине
+CHANS = 3 # количество смешиваемых оттенков
+EPOCHS = 100 # допустимое количество раз для модели допустить ошибку
+
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
     self.images = os.path.join(pathto_dset, namedset, "images", "train" if train else "val")
@@ -72,20 +86,90 @@ class SetNoob(data.Dataset):
 
     return (image_target, target)
 
+class NoobDetectionModel(nn.Module): 
+  def __init__(self, in_features, out_features):
+    super().__init__()
+    self.fc1 = nn.Linear(in_features, 128)
+    self.bn1 = nn.BatchNorm1d(128)
+    self.fc2 = nn.Linear(128, 512)
+    self.bn2 = nn.BatchNorm1d(512)
+    self.fc3 = nn.Linear(512, 256)
+    self.bn3 = nn.BatchNorm1d(256)
+    self.fc4 = nn.Linear(256, out_features)
+    self.relu = nn.ReLU()
 
-""" 
-# ручной collate_fn 
-def def_call(batch):
-  batch = [(image, target) for image, target in batch]
-  images = [image for image, _ in batch]
-  targets = [target for _, target in batch]
-  return images, targets
-"""
+  def forward(self, x):
+    x = x.view(x.size(0), -1) # hacks
+    out = self.relu(self.bn1(self.fc1(x)))
+    out = self.relu(self.bn2(self.fc2(out)))
+    out = self.relu(self.bn3(self.fc3(out)))
+    return self.fc4(out)
+
+class ModelTrainer:
+  def __init__(self, model, sets, lr=0.001):
+    self.model = model
+    
+    train_set, val_set, test_set = sets
+    
+    self.train_loader = data.DataLoader(dataset=train_set, batch_size=4, shuffle=True)
+    self.val_loader = data.DataLoader(dataset=val_set, batch_size=2, shuffle=False)  
+    self.test_loader = data.DataLoader(dataset=test_set, batch_size=2, shuffle=False)
+    
+    self.criterion = nn.MSELoss()
+    self.optimizer = Adam(params=self.model.parameters(), lr=lr)
+
+  def train(self):
+
+    losses = 0
+    for x, y in self.train_loader:
+      pred = self.model(x).reshape(-1, 10, 85)
+      loss = self.criterion(pred, y)
+
+      self.optimizer.zero_grad()
+      loss.backward()
+      self.optimizer.step()
+
+      losses += loss.item()
+    return losses / len(self.train_loader)
+
+  def valid(self):
+    losses = 0
+    with torch.no_grad():
+      for x, y in self.val_loader:
+        pred = self.model(x).reshape(-1, 10, 85)
+        losses += self.criterion(pred, y).item()
+    
+    return losses / len(self.val_loader)
+  
+  def test(self):
+    losses = 0
+    with torch.no_grad():
+      for x,y in self.test_loader:
+        pred=self.model(x).reshape(-1, 10, 85)
+        loss +=self.criterion(pred, y).item()
+      
+    return losses / len(self.test_loader)
+
+  def fit(self):
+    for _ep in range(EPOCHS):
+      self.model.train()
+      train_meanloss = self.train()
+
+      self.model.eval()
+      val_meanloss = self.valid()
+
+      if _ep % 10 == 0: print(f'[{_ep}/{EPOCHS}]\tLOSS TRAIN {train_meanloss}\tLOSS VAL {val_meanloss}')
+
+    self.model.eval()
+    return self.test()
+
+  def __call__(self):
+    return self.fit()
 
 def view_image(image, name_widow):
   cv2.imshow(name_widow, image)
 
-# нарисовать прямоугольник в принимаемых координатах
+# нарисовать прямоугольник используя изображения (batch_size, rgb, w, h) и координаты рамки.
 def detection_objects(x, y):
   for image, target in zip(x, y):    
     image = image.permute(1, 2, 0).numpy() 
@@ -103,33 +187,7 @@ def detection_objects(x, y):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-class NootDetectionModel(nn.Module): 
-  def __init__(self, in_features, out_features):
-    super().__init__()
-    self.fc1 = nn.Linear(in_features, 128)
-    self.bn1 = nn.BatchNorm1d(128)
-    self.fc2 = nn.Linear(128, 512)
-    self.bn2 = nn.BatchNorm1d(512)
-    self.fc3 = nn.Linear(512, 256)
-    self.bn3 = nn.BatchNorm1d(256)
-    self.fc4 = nn.Linear(256, out_features)
-    self.relu = nn.ReLU()
-
-  def forward(self, x):
-    # x = x.view(x.size(0), -1) # hacks
-    out = self.relu(self.bn1(self.fc1(x)))
-    out = self.relu(self.bn2(self.fc2(out)))
-    out = self.relu(self.bn3(self.fc3(out)))
-    return self.fc4(out)
-
-NUM_CLASSES = 30
-NUM_PREDICTIONS = 10
-
 def main():
-  H, W = (224, 224)
-  CHANS = 3
-  EPOCHS = 100
-
   transforms = v2.Compose([
     v2.Resize((H, W)),
     v2.ToImage(),
@@ -137,65 +195,16 @@ def main():
   ])
 
   train_set = SetNoob("./", "coco8", train=True, transforms=transforms)
-  # val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
+  val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
+  test_set = SetNoob("./", "coco8", train=False, transforms=transforms)
 
-  train_loader = data.DataLoader(dataset=train_set, batch_size=2, shuffle=False)
-  # val_loader = data.DataLoader(dataset=val_set, batch_size=1, shuffle=False)  
-  
-  for x, y in train_loader: # <== вывести изображения с рамками
-    detection_objects(x, y)
-    break
-  
-  exit()
   in_dims_model = H * W * CHANS
   out_dims_model = NUM_PREDICTIONS * (5 + NUM_CLASSES) #где 5 => [x1, y1, x2, y2, objectness]
-  model = NootDetectionModel(in_features=in_dims_model, out_features=out_dims_model)
-  criterion = nn.MSELoss()
-  optimizer = Adam(params=model.parameters(), lr=0.001)
-  
-  print("ОБУЧЕНИЕ && ВАЛИДАЦИЯ\n")
-  for _ep in range(EPOCHS):
-    train_avg_loss = 0
-    train_cnt_loss = 0
-    val_avg_loss = 0
-    val_cnt_loss = 0
+  model = NoobDetectionModel(in_features=in_dims_model, out_features=out_dims_model)
 
-    model.train()
-    for images, targets in train_loader:
-      print(images)
-      exit()
-      # pred = model(images).reshape(-1, 10, 85)
-      pred = model(images)
-      print(pred.shape)
-      exit()
-
-      loss = criterion(pred, targets)
-      print(loss.shape)
-      exit()
-
-      train_avg_loss += loss.item()
-      train_cnt_loss += 1
-      optimizer.zero_grad()
-      loss.backward()
-      optimizer.step()
-    with torch.no_grad():
-      model.eval()
-      for images, targets in val_loader:
-        print(images)
-        exit()
-        pred = model(images)
-
-        val_avg_loss += criterion(pred, targets)
-        val_cnt_loss += 1
-    
-    if _ep % 10 == 0: 
-      print(f'ep [{_ep}/{EPOCHS}] \t LOSS TRAIN {train_avg_loss / train_cnt_loss} \t LOSS VAL {val_avg_loss / val_cnt_loss}')
-
-  print("\nТЕСТ")
-  model.eval()
-
-
-  print(train_set[0])
+  model_trainer = ModelTrainer(model, (train_set, val_set, test_set))
+  test_mean_loss = model_trainer() 
+  print(f'общий показатель ошибки модели: {test_mean_loss}') # этот показатель ошибки должен быть единственным в потоке вывода из всех выводимых средних ошибок модели
 
 
 if __name__ == "__main__":
