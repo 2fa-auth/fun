@@ -50,6 +50,7 @@ def detection_objects(x, y):
     
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
     
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
@@ -109,7 +110,37 @@ class NoobDetectionModel(nn.Module):
       nn.Linear(256, out_features)
     )
 
-  def forward(self, x): return self.net(x.view(x.size(0), -1))
+  def forward(self, x): 
+    return self.net(x.view(x.size(0), -1))
+
+
+class BboxLoss_withMSE:
+  def IoU(self, box1, box2):
+    x1_box1, y1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5]), torch.min(box1[...,3:4], box1[..., 5:6]) 
+    x2_box1, y2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3]), torch.max(box1[..., 5:6], box1[...,3:4])
+    x1_box2, y1_box2 = torch.min(box2[..., 2:3], box2[..., 4:5]), torch.min(box2[...,3:4], box2[..., 5:6]) 
+    x2_box2, y2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3]), torch.max(box2[..., 5:6], box2[..., 3:4])
+    x1_box, y1_box = torch.max(x1_box1, x1_box2), torch.max(y1_box1, y1_box2)
+    x2_box, y2_box = torch.min(x2_box1, x2_box2), torch.min(y2_box1, y2_box2)
+
+    intersection_area = torch.clamp(x2_box - x1_box, 0) * torch.clamp(y2_box - y1_box, 0)
+    wbox1, hbox1 = x2_box1 - x1_box1, y2_box1 - y1_box1
+    wbox2, hbox2 = x2_box2 - x1_box2, y2_box2 - y1_box2
+    area_box1, area_box2 = wbox1 * hbox1, wbox2 * hbox2
+    union_area = area_box1 + area_box2 - intersection_area
+    return intersection_area / (union_area + 1e-6)
+
+  def __call__(self, pred, y):
+    present = y[..., 0].unsqueeze(-1)
+    criterion = nn.MSELoss(reduction='none')
+
+    present_loss = criterion(pred[..., 0:1], y[..., 0:1]).mean()
+    iou_loss = (present * (1 - self.IoU(pred, y))).mean()
+    class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
+    coords_loss = (present * criterion(pred[..., 2:], y[..., 2:])).mean()
+
+    return (iou_loss + coords_loss + class_loss + present_loss)
+
 
 class ModelTrainer: 
   def __init__(self, model, sets, lr=0.001):
@@ -119,7 +150,7 @@ class ModelTrainer:
     self.train_loader = data.DataLoader(dataset=train_set, batch_size=2, shuffle=True)
     self.val_loader = data.DataLoader(dataset=val_set, batch_size=2, shuffle=False)  
     self.test_loader = data.DataLoader(dataset=test_set, batch_size=2, shuffle=False)
-    self.criterion = nn.MSELoss()
+    self.criterion = BboxLoss_withMSE()
     self.optimizer = Adam(params=self.model.parameters(), lr=lr)
   
   def train(self):
@@ -175,6 +206,7 @@ class ModelTrainer:
     self.model.eval()
 
   def __call__(self): self.fit()
+
 
 def main():
   transforms = v2.Compose([
