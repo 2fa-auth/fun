@@ -22,12 +22,15 @@ W = 224
 CHANS = 3 
 EPOCHS = 40
 
+# демасштабирование координат
 def unscale_coords(w, h, bbox):
   return bbox[:, :4] * torch.tensor([w,h,w,h], device=bbox.device)
 
+# масштабиование координат
 def scale_coords(w, h, bbox): 
   return (bbox.reshape(-1, 2) / torch.tensor([w, h], device=bbox.device)).reshape(-1, 4)
 
+# отображение ограничивающих рамок
 def detection_objects(x, y):
   for image, target in zip(x, y):    
     image = image.to('cpu')
@@ -51,7 +54,7 @@ def detection_objects(x, y):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    
+# нубский сет 
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
     self.images = os.path.join(pathto_dset, namedset, "images", "train" if train else "val")
@@ -99,7 +102,7 @@ class SetNoob(data.Dataset):
 
     return (image_target, target)
 
-
+# модель
 class NoobDetectionModel(nn.Module): 
   def __init__(self, in_features, out_features):
     super().__init__()
@@ -114,19 +117,33 @@ class NoobDetectionModel(nn.Module):
     return self.net(x.view(x.size(0), -1))
 
 
+# собственный счетчик ошибок классов, ограничивающих рамок и других параметров pred
 class BboxLoss_withMSE:
   def IoU(self, box1, box2):
-    x1_box1, y1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5]), torch.min(box1[...,3:4], box1[..., 5:6]) 
-    x2_box1, y2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3]), torch.max(box1[..., 5:6], box1[...,3:4])
-    x1_box2, y1_box2 = torch.min(box2[..., 2:3], box2[..., 4:5]), torch.min(box2[...,3:4], box2[..., 5:6]) 
-    x2_box2, y2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3]), torch.max(box2[..., 5:6], box2[..., 3:4])
-    x1_box, y1_box = torch.max(x1_box1, x1_box2), torch.max(y1_box1, y1_box2)
-    x2_box, y2_box = torch.min(x2_box1, x2_box2), torch.min(y2_box1, y2_box2)
+    x1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5])
+    y1_box1 = torch.min(box1[...,3:4], box1[..., 5:6]) 
+    x2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3])
+    y2_box1 = torch.max(box1[..., 5:6], box1[...,3:4])
+    x1_box2 = torch.min(box2[..., 2:3], box2[..., 4:5])
+    y1_box2 = torch.min(box2[...,3:4], box2[..., 5:6]) 
+    x2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
+    y2_box2 = torch.max(box2[..., 5:6], box2[..., 3:4])
+    
+    x1_box = torch.max(x1_box1, x1_box2)
+    y1_box = torch.max(y1_box1, y1_box2)
+    x2_box = torch.min(x2_box1, x2_box2)
+    y2_box = torch.min(y2_box1, y2_box2)
 
     intersection_area = torch.clamp(x2_box - x1_box, 0) * torch.clamp(y2_box - y1_box, 0)
-    wbox1, hbox1 = x2_box1 - x1_box1, y2_box1 - y1_box1
-    wbox2, hbox2 = x2_box2 - x1_box2, y2_box2 - y1_box2
-    area_box1, area_box2 = wbox1 * hbox1, wbox2 * hbox2
+
+    wbox1 = x2_box1 - x1_box1
+    hbox1 = y2_box1 - y1_box1
+    wbox2 = x2_box2 - x1_box2 
+    hbox2 = y2_box2 - y1_box2
+
+    area_box1 = wbox1 * hbox1
+    area_box2 = wbox2 * hbox2
+
     union_area = area_box1 + area_box2 - intersection_area
     return intersection_area / (union_area + 1e-6)
 
@@ -141,7 +158,7 @@ class BboxLoss_withMSE:
 
     return (iou_loss + coords_loss + class_loss + present_loss)
 
-
+# обучение
 class ModelTrainer: 
   def __init__(self, model, sets, lr=0.001):
     self.dev = 'cuda' if torch.cuda.is_available else 'cpu'
