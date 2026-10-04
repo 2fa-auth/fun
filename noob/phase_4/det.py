@@ -13,7 +13,7 @@ import torch.nn as nn
 
 import cv2
 import numpy as np
-from utils import IoU
+import utils
 
 
 NUM_CLASSES = 80
@@ -23,34 +23,6 @@ W = 224
 CHANS = 3 
 EPOCHS = 40
 
-def unscale_coords(w, h, bbox):
-  return bbox[:, :4] * torch.tensor([w,h,w,h], device=bbox.device)
-
-def scale_coords(w, h, bbox): 
-  return (bbox.reshape(-1, 2) / torch.tensor([w, h], device=bbox.device)).reshape(-1, 4)
-
-def detection_objects(x, y):
-  for image, target in zip(x, y):    
-    image = image.to('cpu')
-    target = target.to('cpu')
-    
-    image = image.permute(1, 2, 0).numpy()
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    target = unscale_coords(W, H, target)
-
-    det_image = image.copy()
-
-    for t in target:
-      x1 = int(t[0].item()) #pt1
-      y1 = int(t[1].item()) #pt1
-      x2 = int(t[2].item()) #pt2
-      y2 = int(t[3].item()) #pt2
-      
-      cv2.rectangle(det_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
-      cv2.imshow('picture from COCO8', det_image)
-      cv2.waitKey(0)
-      cv2.destroyAllWindows()
-      exit()
 
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
@@ -89,16 +61,23 @@ class SetNoob(data.Dataset):
     image_target = Image.open(os.path.join(self.images, image_target)).convert('RGB')
     w, h = image_target.size
 
-    bbox = target[:, :4]
-    x1, y1 = bbox[:, 0] - bbox[:, 2] / 2, bbox[:, 1] - bbox[:, 3] / 2
-    x2, y2 = bbox[:, 0] + bbox[:, 2] / 2, bbox[:, 1] + bbox[:, 3] / 2
-    bbox[:, 0], bbox[:, 1] = x1, y1
-    bbox[:, 2], bbox[:, 3] = x2, y2
+    bbox=target[:, :4]
+    x1=bbox[:, 0]-bbox[:, 2]/2
+    y1=bbox[:, 1]-bbox[:, 3]/2
+    x2=bbox[:, 0]+bbox[:, 2]/2
+    y2=bbox[:, 1]+bbox[:, 3]/2
+    bbox[:, 0]=x1
+    bbox[:, 1]=y1
+    bbox[:, 2]=x2 
+    bbox[:, 3]=y2
 
     if self.transforms:
-      bbox = BoundingBoxes(data=unscale_coords(w, h, bbox), format='XYXY', canvas_size=(h, w))
+      bbox = BoundingBoxes(data=utils.unscale_coords(w, h, bbox), format='XYXY', canvas_size=(h, w))
       image_target, target[:, :4] = self.transforms(image_target, bbox)
-      target[:, :4] = scale_coords(w, h, bbox) # нормализация координат
+      target[:, :4] = utils.scale_coords(w, h, bbox) # нормализация координат
+
+    indices = torch.argsort(target[..., 0])
+    target = torch.gather(input=target, dim=0, index=indices.unsqueeze(-1).expand_as(target))
 
     return (image_target, target)
 
@@ -107,14 +86,16 @@ class NoobDetectionModel(nn.Module):
   def __init__(self, in_features, out_features):
     super().__init__()
     self.net = nn.Sequential(
-      nn.Linear(in_features,512),  nn.BatchNorm1d(512), nn.ReLU(),
-      nn.Linear(512, 1024),         nn.BatchNorm1d(1024), nn.ReLU(),
-      nn.Linear(1024, 512),         nn.BatchNorm1d(512), nn.ReLU(),
-      nn.Linear(512, out_features)
+      nn.Linear(in_features,128),  nn.BatchNorm1d(128), nn.ReLU(),
+      nn.Linear(128, 512),         nn.BatchNorm1d(512), nn.ReLU(),
+      nn.Linear(512, 256),         nn.BatchNorm1d(256), nn.ReLU(),
+      nn.Linear(256, out_features)  
     )
 
   def forward(self, x): 
-    return self.net(x.view(x.size(0), -1))
+    x = x.view(x.size(0), -1)
+    return self.net(x)
+
 
 class BboxLoss_withMSE:
   def __call__(self, pred, y):
@@ -123,31 +104,14 @@ class BboxLoss_withMSE:
 
     present_loss = criterion(pred[..., 4:5], y[..., 4:5]).mean()
     
-    iou_loss = (objectness * (1 - IoU(pred, y))).mean()
+    iou_loss = (objectness * (1 - utils.IoU(pred, y))).mean()
     # class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
     coords_loss = (objectness * criterion(pred[..., :4], y[..., :4])).mean()
 
     return (present_loss)
 
 
-import torch.nn as nn
-from utils import IoU
-
-class BboxLoss_withMSE:
-  def __call__(self, pred, y):
-    objectness = y[..., 4].unsqueeze(-1)
-    criterion = nn.MSELoss(reduction='none')
-
-    present_loss = criterion(pred[..., 4:5], y[..., 4:5]).mean()
-    
-    iou_loss = (objectness * (1 - IoU(pred, y))).mean()
-    # class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
-    coords_loss = (objectness * criterion(pred[..., :4], y[..., :4])).mean()
-
-    return (present_loss)
-
-
-class ModelTrainer: 
+class ModelTrainer:
   def __init__(self, model, sets, lr=0.001):
     self.dev = 'cuda' if torch.cuda.is_available else 'cpu'
     self.model = model.to(self.dev)
@@ -163,6 +127,8 @@ class ModelTrainer:
     for x, y in self.train_loader:
       x, y = x.to(self.dev), y.to(self.dev)
       pred = self.model(x).reshape(-1, 10, 85)
+      pred = utils.sort_by_x1(pred)
+
       loss = self.criterion(pred, y)
       
       self.optimizer.zero_grad()
@@ -178,6 +144,7 @@ class ModelTrainer:
       for x, y in self.val_loader:
         x, y = x.to(self.dev), y.to(self.dev)
         pred = self.model(x).reshape(-1, 10, 85)
+        pred = utils.sort_by_x1(pred)
         losses += self.criterion(pred, y).item()
 
     return losses / len(self.val_loader)
@@ -188,14 +155,18 @@ class ModelTrainer:
     with torch.no_grad():
       for x,y in self.test_loader:
         x, y = x.to(self.dev), y.to(self.dev)
-        pred=self.model(x).reshape(-1, 10, 85)
+        pred = self.model(x).reshape(-1, 10, 85)
+        pred = utils.sort_by_x1(pred)
         last_pred = pred
         last_y = y
 
 
-    pred[pred[..., 4] >= 0.5] = 1
+    pred[..., 4] = torch.where(pred[..., 4] >= 0.5, 1, 0)
 
-    detection_objects(x, last_pred)
+    # detection_objects(x, last_pred)
+    print(y[0])
+    print(pred[0])
+
     losses += self.criterion(pred, y).item()
 
     return losses / len(self.test_loader)
