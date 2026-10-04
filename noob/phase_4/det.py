@@ -13,6 +13,7 @@ import torch.nn as nn
 
 import cv2
 import numpy as np
+from utils import IoU
 
 
 NUM_CLASSES = 80
@@ -22,15 +23,12 @@ W = 224
 CHANS = 3 
 EPOCHS = 40
 
-# демасштабирование координат
 def unscale_coords(w, h, bbox):
   return bbox[:, :4] * torch.tensor([w,h,w,h], device=bbox.device)
 
-# масштабиование координат
 def scale_coords(w, h, bbox): 
   return (bbox.reshape(-1, 2) / torch.tensor([w, h], device=bbox.device)).reshape(-1, 4)
 
-# отображение ограничивающих рамок
 def detection_objects(x, y):
   for image, target in zip(x, y):    
     image = image.to('cpu')
@@ -50,11 +48,10 @@ def detection_objects(x, y):
       
       cv2.rectangle(det_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
       cv2.imshow('picture from COCO8', det_image)
-    
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+      cv2.waitKey(0)
+      cv2.destroyAllWindows()
+      exit()
 
-# нубский сет 
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
     self.images = os.path.join(pathto_dset, namedset, "images", "train" if train else "val")
@@ -79,12 +76,15 @@ class SetNoob(data.Dataset):
             for val in t.split(' '): 
               if val != '': ar.append(float(val))
             if ar: 
+             
               ar_target = deepcopy(ar)
-              for i in range(len(ar)-1): ar_target[i] = ar[i+1]
-              ar_target[-1] = 1 if ar[0] > 0 else 0
-
+              
+              for i in range(len(ar)-1):  ar_target[i] = ar[i+1]
+              
+              ar_target[-1] = 1 
               for i in range(NUM_CLASSES): ar_target.append( 1 if i == ar[0] else 0 )
               target[num_targs] = torch.tensor(ar_target).unsqueeze(0) ; num_targs += 1              
+
 
     image_target = Image.open(os.path.join(self.images, image_target)).convert('RGB')
     w, h = image_target.size
@@ -102,63 +102,51 @@ class SetNoob(data.Dataset):
 
     return (image_target, target)
 
-# модель
+
 class NoobDetectionModel(nn.Module): 
   def __init__(self, in_features, out_features):
     super().__init__()
     self.net = nn.Sequential(
-      nn.Linear(in_features,128),  nn.BatchNorm1d(128), nn.ReLU(),
-      nn.Linear(128, 512),         nn.BatchNorm1d(512), nn.ReLU(),
-      nn.Linear(512, 256),         nn.BatchNorm1d(256), nn.ReLU(),
-      nn.Linear(256, out_features)
+      nn.Linear(in_features,512),  nn.BatchNorm1d(512), nn.ReLU(),
+      nn.Linear(512, 1024),         nn.BatchNorm1d(1024), nn.ReLU(),
+      nn.Linear(1024, 512),         nn.BatchNorm1d(512), nn.ReLU(),
+      nn.Linear(512, out_features)
     )
 
   def forward(self, x): 
     return self.net(x.view(x.size(0), -1))
 
-
-# собственный счетчик ошибок классов, ограничивающих рамок и других параметров pred
 class BboxLoss_withMSE:
-  def IoU(self, box1, box2):
-    x1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5])
-    y1_box1 = torch.min(box1[...,3:4], box1[..., 5:6]) 
-    x2_box1 = torch.max(box1[..., 4:5], box1[..., 2:3])
-    y2_box1 = torch.max(box1[..., 5:6], box1[...,3:4])
-    x1_box2 = torch.min(box2[..., 2:3], box2[..., 4:5])
-    y1_box2 = torch.min(box2[...,3:4], box2[..., 5:6]) 
-    x2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
-    y2_box2 = torch.max(box2[..., 5:6], box2[..., 3:4])
-    
-    x1_box = torch.max(x1_box1, x1_box2)
-    y1_box = torch.max(y1_box1, y1_box2)
-    x2_box = torch.min(x2_box1, x2_box2)
-    y2_box = torch.min(y2_box1, y2_box2)
-
-    intersection_area = torch.clamp(x2_box - x1_box, 0) * torch.clamp(y2_box - y1_box, 0)
-
-    wbox1 = x2_box1 - x1_box1
-    hbox1 = y2_box1 - y1_box1
-    wbox2 = x2_box2 - x1_box2 
-    hbox2 = y2_box2 - y1_box2
-
-    area_box1 = wbox1 * hbox1
-    area_box2 = wbox2 * hbox2
-
-    union_area = area_box1 + area_box2 - intersection_area
-    return intersection_area / (union_area + 1e-6)
-
   def __call__(self, pred, y):
-    present = y[..., 0].unsqueeze(-1)
+    objectness = y[..., 4].unsqueeze(-1)
     criterion = nn.MSELoss(reduction='none')
 
-    present_loss = criterion(pred[..., 0:1], y[..., 0:1]).mean()
-    iou_loss = (present * (1 - self.IoU(pred, y))).mean()
-    class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
-    coords_loss = (present * criterion(pred[..., 2:], y[..., 2:])).mean()
+    present_loss = criterion(pred[..., 4:5], y[..., 4:5]).mean()
+    
+    iou_loss = (objectness * (1 - IoU(pred, y))).mean()
+    # class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
+    coords_loss = (objectness * criterion(pred[..., :4], y[..., :4])).mean()
 
-    return (iou_loss + coords_loss + class_loss + present_loss)
+    return (present_loss)
 
-# обучение
+
+import torch.nn as nn
+from utils import IoU
+
+class BboxLoss_withMSE:
+  def __call__(self, pred, y):
+    objectness = y[..., 4].unsqueeze(-1)
+    criterion = nn.MSELoss(reduction='none')
+
+    present_loss = criterion(pred[..., 4:5], y[..., 4:5]).mean()
+    
+    iou_loss = (objectness * (1 - IoU(pred, y))).mean()
+    # class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
+    coords_loss = (objectness * criterion(pred[..., :4], y[..., :4])).mean()
+
+    return (present_loss)
+
+
 class ModelTrainer: 
   def __init__(self, model, sets, lr=0.001):
     self.dev = 'cuda' if torch.cuda.is_available else 'cpu'
@@ -202,6 +190,10 @@ class ModelTrainer:
         x, y = x.to(self.dev), y.to(self.dev)
         pred=self.model(x).reshape(-1, 10, 85)
         last_pred = pred
+        last_y = y
+
+
+    pred[pred[..., 4] >= 0.5] = 1
 
     detection_objects(x, last_pred)
     losses += self.criterion(pred, y).item()
@@ -209,7 +201,6 @@ class ModelTrainer:
     return losses / len(self.test_loader)
 
   def fit(self):
-    # расскоментируй и убери нормализацию координат (помечена комментом) если хочешь проверить изображения на bbox
     # for x, y in self.train_loader: 
       # detection_objects(x, y)
       # exit()
@@ -232,9 +223,9 @@ def main():
     v2.ToDtype(torch.float32, scale=True),
   ])
 
-  train_set = SetNoob("./", "coco8", train=False, transforms=transforms)
+  train_set = SetNoob("./", "coco8", train=True, transforms=transforms)
   val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
-  test_set = SetNoob("./", "coco8", train=False, transforms=transforms)
+  test_set = SetNoob("./", "coco8", train=True, transforms=transforms)
 
   model = NoobDetectionModel(in_features=H * W * CHANS, out_features=NUM_PREDICTIONS * (5 + NUM_CLASSES))
   trainer = ModelTrainer(model, (train_set, val_set, test_set))
