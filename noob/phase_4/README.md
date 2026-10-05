@@ -4,4 +4,4 @@
 
 ![пример 1](images/example1.png) ![пример 1](images/example2.png)
 
-Основывается на **COCO**
+Учиться на **COCO**
