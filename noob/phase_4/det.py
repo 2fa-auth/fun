@@ -32,7 +32,8 @@ class SetNoob(data.Dataset):
     self.lbs_list = os.listdir(self.labels)
     self.transforms = transforms
 
-  def __len__(self): return len(self.imgs_list)    
+  def __len__(self): 
+    return len(self.imgs_list)    
 
   def __getitem__(self, index):
     image_target = self.imgs_list[index]
