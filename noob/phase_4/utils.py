@@ -2,7 +2,6 @@ import torch
 import cv2
 import det
 
-
 def IoU(box1, box2):
   x1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5])
   y1_box1 = torch.min(box1[...,3:4], box1[..., 5:6]) 

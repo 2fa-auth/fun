@@ -30,9 +30,10 @@ class SetNoob(data.Dataset):
 
   def __getitem__(self, index):
     """
-    class, cx, cy, w, h -> 
-    -> [w_grid, h_grid, 2, 5 + N_class], где 5 это; x_center, y_center, w, h в нормализованном виде
-      для демасштабирования; координата * w_grid
+    преобраозование с file label*.txt: 
+      class, cx, cy, w, h ==> 
+        ==> [X_grid, Y_grid, 2, 5 + N_class], где 5 это; x_center, y_center, w, h в нормализованном виде
+        для демасштабирования; координата * w_grid
 
     """
 
@@ -159,9 +160,9 @@ class ModelTrainer:
     return losses / len(self.test_loader)
 
   def fit(self):
-    # for x, y in self.train_loader: 
-      # detection_objects(x, y)
-      # exit()
+    #for x, y in self.train_loader: # отобразить изображение с рамками
+      #detection_objects(x, y)
+      #exit()
 
     for _ep in range(EPOCHS):
       self.model.train()

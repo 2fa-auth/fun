@@ -1,4 +1,5 @@
 import torch.nn as nn
+from det import NUM_CLASSES, X_GRID, Y_GRID
 
 class BACKBONEModel(nn.Module): 
   def __init__(self, in_chan, out_features):
@@ -58,7 +59,7 @@ class BACKBONEModel(nn.Module):
         
     self.fcs = nn.Sequential(
     nn.Flatten(),
-    nn.Linear(1024 * 7 * 7, 4096),
+    nn.Linear(1024 * X_GRID * Y_GRID, 4096),
     nn.LeakyReLU(0.1),
     nn.Dropout(0.5),
             
@@ -68,4 +69,4 @@ class BACKBONEModel(nn.Module):
   def forward(self, x): 
     out = self.darknet(x)
     out = self.fcs(out)
-    return out.view(-1, 7, 7, 30)
+    return out.view(-1, 7, 7, NUM_CLASSES)
