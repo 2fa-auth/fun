@@ -60,7 +60,7 @@ class BACKBONEModel(nn.Module):
         
     self.fcs = nn.Sequential(
     nn.Flatten(),
-    nn.Linear(1024 * det.X_GRID * det.Y_GRID, 4096),
+    nn.Linear(1024 * det.W_grid * det.H_grid, 4096),
     nn.LeakyReLU(0.1),
     nn.Dropout(0.5),
             

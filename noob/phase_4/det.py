@@ -3,6 +3,7 @@ import os
 from copy import deepcopy
 from PIL import Image 
 from time import sleep
+import math 
 
 import torch
 from torch.optim import Adam
@@ -13,6 +14,7 @@ import torch.nn as nn
 
 import cv2
 import numpy as np
+
 import utils
 from model import BACKBONEModel
 
@@ -41,37 +43,42 @@ class SetNoob(data.Dataset):
     """
 
 
-    image_target = self.imgs_list[index]
-    target = torch.zeros((NUM_BOXES, NUM_CLASSES+5))
-
-    num_targs = 0
-
-    print(self.lbs_list)
-    exit()
-
+    image = self.imgs_list[index]
+    target = []
 
     for label in self.lbs_list:
-      if label.split('.')[0] == image_target.split('.')[0]:
+      if label.split('.')[0] == image.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
-          ts = f.read().split('\n')
+          ts = f.read().split('\n') # массив содержащий строку из labels
+          # парсинг
           for t in ts: 
             ar = []
             for val in t.split(' '): 
-              if val != '': ar.append(float(val))
+              if val != '': ar.append(float(val)) # str -> float 
             if ar: 
-             
-              ar_target = deepcopy(ar)
-              
-              for i in range(len(ar)-1):  ar_target[i] = ar[i+1]
-              
-              ar_target[-1] = 1 
-              for i in range(NUM_CLASSES): ar_target.append( 1 if i == ar[0] else 0 )
-
-              target[num_targs] = torch.tensor(ar_target).unsqueeze(0) ; num_targs += 1              
+              parse_target = deepcopy(ar)
+              target.append(parse_target)
 
 
-    image_target = Image.open(os.path.join(self.images, image_target)).convert('RGB')
-    w, h = image_target.size
+    
+    for bbox in target:
+      num_x_grid = bbox[1] * W_grid
+      num_y_grid = bbox[2] * H_grid
+      x_grid = bbox[3] * W_image
+      y_grid  = bbox[4] * H_image
+      print(f'какие сетки: X: {math.floor(num_x_grid)}, Y: {math.floor(num_y_grid)}')
+      print(f'центр самого объекта: x: {bbox[1]}, y: {bbox[2]}')
+      print(f'размер рамки относительно изображения: w: {x_grid}, h: {y_grid}') 
+      print()
+
+
+
+    image = Image.open(os.path.join(self.images, image)).convert('RGB')
+    w, h = image.size
+
+
+
+    exit()
 
     bbox=target[:, :4]
     x1=bbox[:, 0]-bbox[:, 2]/2
@@ -185,15 +192,15 @@ class ModelTrainer:
 
 NUM_CLASSES = 30
 NUM_BOXES = 2
-H = 448
-W = 448
-X_GRID = 7
-Y_GRID = 7 
+H_image = 448
+W_image = 448
+H_grid = 7
+W_grid = 7 
 EPOCHS = 40
 
 def main():
   transforms = v2.Compose([
-    v2.Resize((H, W)),
+    v2.Resize((H_image, W_image)),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
   ])
