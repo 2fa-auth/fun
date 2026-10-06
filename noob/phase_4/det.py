@@ -14,14 +14,7 @@ import torch.nn as nn
 import cv2
 import numpy as np
 import utils
-
-
-NUM_CLASSES = 80
-NUM_PREDICTIONS = 10 
-H = 224 
-W = 224 
-CHANS = 3 
-EPOCHS = 40
+from model import BACKBONEModel
 
 
 class SetNoob(data.Dataset):
@@ -36,8 +29,15 @@ class SetNoob(data.Dataset):
     return len(self.imgs_list)    
 
   def __getitem__(self, index):
+    """
+    class, cx, cy, w, h -> 
+    -> [w_grid, h_grid, 2, 5 + N_class], где 5 это; x_center, y_center, w, h в нормализованном виде
+      для демасштабирования; координата * w_grid
+
+    """
+
     image_target = self.imgs_list[index]
-    target = torch.zeros((NUM_PREDICTIONS, NUM_CLASSES+5))
+    target = torch.zeros((NUM_BOXES, NUM_CLASSES+5))
 
     num_targs = 0
     for label in self.lbs_list: 
@@ -56,6 +56,7 @@ class SetNoob(data.Dataset):
               
               ar_target[-1] = 1 
               for i in range(NUM_CLASSES): ar_target.append( 1 if i == ar[0] else 0 )
+
               target[num_targs] = torch.tensor(ar_target).unsqueeze(0) ; num_targs += 1              
 
 
@@ -81,21 +82,6 @@ class SetNoob(data.Dataset):
     target = torch.gather(input=target, dim=0, index=indices.unsqueeze(-1).expand_as(target))
 
     return (image_target, target)
-
-
-class NoobDetectionModel(nn.Module): 
-  def __init__(self, in_features, out_features):
-    super().__init__()
-    self.net = nn.Sequential(
-      nn.Linear(in_features,128),  nn.BatchNorm1d(128), nn.ReLU(),
-      nn.Linear(128, 512),         nn.BatchNorm1d(512), nn.ReLU(),
-      nn.Linear(512, 256),         nn.BatchNorm1d(256), nn.ReLU(),
-      nn.Linear(256, out_features)  
-    )
-
-  def forward(self, x): 
-    x = x.view(x.size(0), -1)
-    return self.net(x)
 
 
 class BboxLoss_withMSE:
@@ -187,6 +173,13 @@ class ModelTrainer:
 
   def __call__(self): self.fit()
 
+NUM_CLASSES = 30
+NUM_BOXES = 2
+H = 448
+W = 448
+X_GRID = 7
+Y_GRID = 7 
+EPOCHS = 40
 
 def main():
   transforms = v2.Compose([
@@ -199,9 +192,11 @@ def main():
   val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
   test_set = SetNoob("./", "coco8", train=True, transforms=transforms)
 
-  model = NoobDetectionModel(in_features=H * W * CHANS, out_features=NUM_PREDICTIONS * (5 + NUM_CLASSES))
-  trainer = ModelTrainer(model, (train_set, val_set, test_set))
-  trainer()
+  # размер предсказания: 7 * 7 * (2 * 5 + 20) = 1470 чисел
+  # каждая из 49 ячеек предсказывает: [cx, cy, w, h, conf1, cx, cy, w, h, conf2] + 20 классов
+  out_fs = 7 * 7 * (NUM_BOXES * 5 + NUM_CLASSES)
+  model = BACKBONEModel(in_chan=3, out_features=out_fs)
+  trainer = ModelTrainer(model, (train_set, val_set, test_set)) ; trainer()
 
   print(f'общий показатель ошибки модели: {trainer.test()}')
 
