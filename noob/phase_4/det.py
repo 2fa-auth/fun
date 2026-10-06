@@ -31,21 +31,11 @@ class SetNoob(data.Dataset):
     return len(self.imgs_list)    
 
   def __getitem__(self, index):
-    """
-    преобраозование с file label*.txt: 
-      class, cx, cy, w, h ==> 
-        ==> [X_grid, Y_grid, 2, 5 + N_class], где 5 это; x_center, y_center, w, h в нормализованном виде
-        для демасштабирования; координата * w_grid
-
-    реалиная координата = нормализованная координата * X_grid
-    определить какая рамка по счету (по X); р. координата = нормализованная * W window
-    определить какая рамка по счету (по Y); р. координата = нормализованная * Y window
-    """
-
-
     image = self.imgs_list[index]
-    target = []
+    target = torch.zeros(7, 7, 2 * 5 + NUM_CLASSES)
+    labels = []
 
+    # сопоставление файлов из images и labels И парсинг файла label*
     for label in self.lbs_list:
       if label.split('.')[0] == image.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
@@ -57,39 +47,22 @@ class SetNoob(data.Dataset):
               if val != '': ar.append(float(val)) # str -> float 
             if ar: 
               parse_target = deepcopy(ar)
-              target.append(parse_target)
+              labels.append(parse_target)
 
+    # преобразование из [class, cx,cy,w,h] в [cx1,cy1,w1,h1, conf1, cx2,cy2,w2,h2, conf2...N classes]
+    # модель предсказывает ДВА bbox:
+    bbox1 = torch.tensor(labels) 
+    bbox2 = torch.zeros_like(bbox1)
+    class_id = bbox1[:, 0].to(torch.int32)
+    ones = torch.tensor([1 for _ in range(0, bbox1.size(0))]).unsqueeze(0).T
+    labels = torch.cat([bbox1, bbox2, ones, torch.zeros(bbox1.size(0), NUM_CLASSES)], dim=1)[:, 1:]
+    labels[:, class_id] = 1
+
+    cell_x = torch.floor(labels[:, 0] * W_grid).to(torch.int32) 
+    cell_y = torch.floor(labels[:, 1] * H_grid).to(torch.int32)
+    target[cell_x, cell_y] = labels
 
     
-    for bbox in target:
-      num_x_grid = bbox[1] * W_grid
-      num_y_grid = bbox[2] * H_grid
-      x_grid = bbox[3] * W_image
-      y_grid  = bbox[4] * H_image
-      print(f'какие сетки: X: {math.floor(num_x_grid)}, Y: {math.floor(num_y_grid)}')
-      print(f'центр самого объекта: x: {bbox[1]}, y: {bbox[2]}')
-      print(f'размер рамки относительно изображения: w: {x_grid}, h: {y_grid}') 
-      print()
-
-
-
-    image = Image.open(os.path.join(self.images, image)).convert('RGB')
-    w, h = image.size
-
-
-
-    exit()
-
-    bbox=target[:, :4]
-    x1=bbox[:, 0]-bbox[:, 2]/2
-    y1=bbox[:, 1]-bbox[:, 3]/2
-    x2=bbox[:, 0]+bbox[:, 2]/2
-    y2=bbox[:, 1]+bbox[:, 3]/2
-    bbox[:, 0]=x1
-    bbox[:, 1]=y1
-    bbox[:, 2]=x2 
-    bbox[:, 3]=y2
-
     if self.transforms:
       bbox = BoundingBoxes(data=utils.unscale_coords(w, h, bbox), format='XYXY', canvas_size=(h, w))
       image_target, target[:, :4] = self.transforms(image_target, bbox)
@@ -190,7 +163,7 @@ class ModelTrainer:
 
   def __call__(self): self.fit()
 
-NUM_CLASSES = 30
+NUM_CLASSES = 80
 NUM_BOXES = 2
 H_image = 448
 W_image = 448
