@@ -1,3 +1,4 @@
+#!/home/client/Documents/fun/venv/bin/python3
 import torch
 import cv2
 import det

@@ -35,13 +35,22 @@ class SetNoob(data.Dataset):
         ==> [X_grid, Y_grid, 2, 5 + N_class], где 5 это; x_center, y_center, w, h в нормализованном виде
         для демасштабирования; координата * w_grid
 
+    реалиная координата = нормализованная координата * X_grid
+    определить какая рамка по счету (по X); р. координата = нормализованная * W window
+    определить какая рамка по счету (по Y); р. координата = нормализованная * Y window
     """
+
 
     image_target = self.imgs_list[index]
     target = torch.zeros((NUM_BOXES, NUM_CLASSES+5))
 
     num_targs = 0
-    for label in self.lbs_list: 
+
+    print(self.lbs_list)
+    exit()
+
+
+    for label in self.lbs_list:
       if label.split('.')[0] == image_target.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
           ts = f.read().split('\n')
