@@ -31,11 +31,11 @@ class SetNoob(data.Dataset):
     return len(self.imgs_list)    
 
   def __getitem__(self, index):
-    image = self.imgs_list[index]
-    target = torch.zeros(7, 7, 2 * 5 + NUM_CLASSES)
-    labels = []
+    image=self.imgs_list[index]
+    target=torch.zeros(7, 7, NUM_BOXES * 5 + NUM_CLASSES)
+    labels=[]
 
-    # сопоставление файлов из images и labels И парсинг файла label*
+    # парсинг label*.txt файла
     for label in self.lbs_list:
       if label.split('.')[0] == image.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
@@ -45,13 +45,11 @@ class SetNoob(data.Dataset):
             ar = []
             for val in t.split(' '): 
               if val != '': ar.append(float(val)) # str -> float 
-            if ar: 
-              parse_target = deepcopy(ar)
-              labels.append(parse_target)
+            if ar: labels.append(ar)
 
-    # преобразование из [class, cx,cy,w,h] в [cx1,cy1,w1,h1, conf1, cx2,cy2,w2,h2, conf2...N classes]
-    # модель предсказывает ДВА bbox:
-    bbox1 = torch.tensor(labels) 
+    # 1. labels: [class, cx,cy,w,h] -> [cx1,cy1,w1,h1, conf1, cx2,cy2,w2,h2, conf2...N classes]
+    # 2. добавление labels в сетку
+    bbox1 =torch.tensor(labels) 
     bbox2 = torch.zeros_like(bbox1)
     class_id = bbox1[:, 0].to(torch.int32)
     ones = torch.tensor([1 for _ in range(0, bbox1.size(0))]).unsqueeze(0).T
@@ -61,9 +59,8 @@ class SetNoob(data.Dataset):
     cell_x = torch.floor(labels[:, 0] * W_grid).to(torch.int32) 
     cell_y = torch.floor(labels[:, 1] * H_grid).to(torch.int32)
     target[cell_x, cell_y] = labels
-
     
-    if self.transforms:
+    if self.transforms: # трансфомарция изображения и bbox
       bbox = BoundingBoxes(data=utils.unscale_coords(w, h, bbox), format='XYXY', canvas_size=(h, w))
       image_target, target[:, :4] = self.transforms(image_target, bbox)
       target[:, :4] = utils.scale_coords(w, h, bbox) # нормализация координат
