@@ -31,11 +31,12 @@ def IoU(box1, box2):
   union_area = area_box1 + area_box2 - intersection_area
   return intersection_area / (union_area + 1e-6)
 
-def unscale_coords(w, h, bbox):
-  return bbox[:, :4] * torch.tensor([w,h,w,h], device=bbox.device)
+def denorm_coords(bbox, w, h):
+  return bbox * torch.tensor([w, h, w, h])
 
-def scale_coords(w, h, bbox): 
-  return (bbox.reshape(-1, 2) / torch.tensor([w, h], device=bbox.device)).reshape(-1, 4)
+def norm_coords(bbox, w, h):
+  return bbox / torch.tensor([w, h, w, h])
+
 
 def detection_objects(x, y):
   for image, target in zip(x, y):    
@@ -44,7 +45,7 @@ def detection_objects(x, y):
     
     image = image.permute(1, 2, 0).numpy()
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    target = unscale_coords(det.W, det.H, target)
+    # target = unscale_coords(det.W, det.H, target)
 
     det_image = image.copy()
 

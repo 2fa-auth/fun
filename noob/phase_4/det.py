@@ -31,8 +31,8 @@ class SetNoob(data.Dataset):
     return len(self.imgs_list)    
 
   def __getitem__(self, index):
-    image=self.imgs_list[index]
     target=torch.zeros(7, 7, NUM_BOXES * 5 + NUM_CLASSES)
+    image=self.imgs_list[index]
     labels=[]
 
     # парсинг label*.txt файла
@@ -46,10 +46,18 @@ class SetNoob(data.Dataset):
             for val in t.split(' '): 
               if val != '': ar.append(float(val)) # str -> float 
             if ar: labels.append(ar)
+    
+    labels = torch.tensor(labels)
+    image = Image.open(os.path.join(self.images,image)).convert('RGB')
+    w, h = image.size
+    if self.transforms:
+      bbox = BoundingBoxes(data=utils.denorm_coords(labels[:, 1:], w, h), format='CXCYWH', canvas_size=(h,w))
+      image, labels[:, 1:] = self.transforms(image, bbox)
+      labels[:, 1:] = utils.norm_coords(bbox, w, h)
 
     # 1. labels: [class, cx,cy,w,h] -> [cx1,cy1,w1,h1, conf1, cx2,cy2,w2,h2, conf2...N classes]
     # 2. добавление labels в сетку
-    bbox1 =torch.tensor(labels) 
+    bbox1 = labels
     bbox2 = torch.zeros_like(bbox1)
     class_id = bbox1[:, 0].to(torch.int32)
     ones = torch.tensor([1 for _ in range(0, bbox1.size(0))]).unsqueeze(0).T
@@ -59,16 +67,9 @@ class SetNoob(data.Dataset):
     cell_x = torch.floor(labels[:, 0] * W_grid).to(torch.int32) 
     cell_y = torch.floor(labels[:, 1] * H_grid).to(torch.int32)
     target[cell_x, cell_y] = labels
-    
-    if self.transforms: # трансфомарция изображения и bbox
-      bbox = BoundingBoxes(data=utils.unscale_coords(w, h, bbox), format='XYXY', canvas_size=(h, w))
-      image_target, target[:, :4] = self.transforms(image_target, bbox)
-      target[:, :4] = utils.scale_coords(w, h, bbox) # нормализация координат
 
-    indices = torch.argsort(target[..., 0])
-    target = torch.gather(input=target, dim=0, index=indices.unsqueeze(-1).expand_as(target))
-
-    return (image_target, target)
+    exit()
+    return image, target
 
 
 class BboxLoss_withMSE:
