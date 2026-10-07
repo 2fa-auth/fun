@@ -68,9 +68,8 @@ def detection_objects(x, y):
   for ax1 in y:
     for ax2 in ax1:
       for el in ax2:
-        if el[0] != 0:
-          labels = torch.cat([labels, el.unsqueeze(0)], dim=0)
-
+        if el[0] != 0: labels = torch.cat([labels, el.unsqueeze(0)], dim=0)
+  
   for image, target in zip(x, labels):    
     image = image.to('cpu')
     target = target.to('cpu')
@@ -80,7 +79,6 @@ def detection_objects(x, y):
     det_image = image.copy()
     target[:4] = cxcywh_to_xyxy(target[:4])
     target[:4] = denorm_coords(target[:4], det.W_image, det.H_image)
-
 
     for i in range(target.size(0)):
       x1 = int(target[0].item()) 
