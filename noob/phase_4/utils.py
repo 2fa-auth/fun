@@ -3,6 +3,8 @@ import torch
 import cv2
 import det
 
+
+# вычисляет пересечение над объединением (Intersection over Union)
 def IoU(box1, box2):
   x1_box1 = torch.min(box1[..., 2:3], box1[..., 4:5])
   y1_box1 = torch.min(box1[...,3:4], box1[..., 5:6]) 
@@ -31,30 +33,61 @@ def IoU(box1, box2):
   union_area = area_box1 + area_box2 - intersection_area
   return intersection_area / (union_area + 1e-6)
 
+# нормализует координаты
 def denorm_coords(bbox, w, h):
   return bbox * torch.tensor([w, h, w, h])
 
+# денормализует координаты
 def norm_coords(bbox, w, h):
   return bbox / torch.tensor([w, h, w, h])
 
+# меняет стиль
+def cxcywh_to_xyxy(coords):
+  """
+  переводит стиль координат ИЗ [x_center, y_center, w, h] В [x1, y1, x2, y2]:
+    x1 = x_center - w / 2
+    y1 = y_center - h / 2
+    x2 = x_center + w / 2
+    y2 = y_center + h / 2
+  """
+  coords = coords.clone()
 
+  x1 = coords[..., 0] - coords[..., 2] / 2
+  y1 = coords[..., 1] - coords[..., 3] / 2
+  x2 = coords[..., 0] + coords[..., 2] / 2
+  y2 = coords[..., 1] + coords[..., 3] / 2
+  coords[..., 0] = x1
+  coords[..., 1] = y1
+  coords[..., 2] = x2
+  coords[..., 3] = y2 
+  return coords
+
+# отображает изображение с рамками 
 def detection_objects(x, y):
-  for image, target in zip(x, y):    
+  labels = torch.tensor([])
+  for ax1 in y:
+    for ax2 in ax1:
+      for el in ax2:
+        if el[0] != 0:
+          labels = torch.cat([labels, el.unsqueeze(0)], dim=0)
+
+  for image, target in zip(x, labels):    
     image = image.to('cpu')
     target = target.to('cpu')
-    
+
     image = image.permute(1, 2, 0).numpy()
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    # target = unscale_coords(det.W, det.H, target)
-
     det_image = image.copy()
+    target[:4] = cxcywh_to_xyxy(target[:4])
+    target[:4] = denorm_coords(target[:4], det.W_image, det.H_image)
 
-    for t in target:
-      x1 = int(t[0].item()) #pt1
-      y1 = int(t[1].item()) #pt1
-      x2 = int(t[2].item()) #pt2
-      y2 = int(t[3].item()) #pt2
-      
+
+    for i in range(target.size(0)):
+      x1 = int(target[0].item()) 
+      y1 = int(target[1].item()) 
+      x2 = int(target[2].item()) 
+      y2 = int(target[3].item()) 
+
       cv2.rectangle(det_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
       cv2.imshow('picture from COCO8', det_image)
       cv2.waitKey(0)

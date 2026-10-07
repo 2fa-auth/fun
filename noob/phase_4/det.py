@@ -46,7 +46,6 @@ class SetNoob(data.Dataset):
             for val in t.split(' '): 
               if val != '': ar.append(float(val)) # str -> float 
             if ar: labels.append(ar)
-    
     labels = torch.tensor(labels)
     image = Image.open(os.path.join(self.images,image)).convert('RGB')
     w, h = image.size
@@ -54,21 +53,22 @@ class SetNoob(data.Dataset):
       bbox = BoundingBoxes(data=utils.denorm_coords(labels[:, 1:], w, h), format='CXCYWH', canvas_size=(h,w))
       image, labels[:, 1:] = self.transforms(image, bbox)
       labels[:, 1:] = utils.norm_coords(bbox, w, h)
-
-    # 1. labels: [class, cx,cy,w,h] -> [cx1,cy1,w1,h1, conf1, cx2,cy2,w2,h2, conf2...N classes]
-    # 2. добавление labels в сетку
-    bbox1 = labels
-    bbox2 = torch.zeros_like(bbox1)
-    class_id = bbox1[:, 0].to(torch.int32)
-    ones = torch.tensor([1 for _ in range(0, bbox1.size(0))]).unsqueeze(0).T
-    labels = torch.cat([bbox1, bbox2, ones, torch.zeros(bbox1.size(0), NUM_CLASSES)], dim=1)[:, 1:]
-    labels[:, class_id] = 1
-
+    
+    # [class, cx,cy,w,h] -> [cx1,cy1,w1,h1, conf1, cx2,cy2,w2,h2, conf2...N classes]
+    class_ids = labels[:, 0].to(torch.int32)
+    labels=torch.cat([
+      labels,
+      torch.zeros_like(labels),
+      torch.ones(labels.size(0), 1),
+      torch.zeros(labels.size(0),
+      NUM_CLASSES)], dim=1)[:, 1:]
+    
+    for i, ax in enumerate(labels): ax[10+class_ids[i]] = 1
+    
     cell_x = torch.floor(labels[:, 0] * W_grid).to(torch.int32) 
     cell_y = torch.floor(labels[:, 1] * H_grid).to(torch.int32)
     target[cell_x, cell_y] = labels
 
-    exit()
     return image, target
 
 
@@ -83,6 +83,7 @@ class BboxLoss_withMSE:
     # class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
     coords_loss = (objectness * criterion(pred[..., :4], y[..., :4])).mean()
 
+    exit()
     return (present_loss)
 
 
@@ -135,7 +136,6 @@ class ModelTrainer:
         last_pred = pred
         last_y = y
 
-
     pred[..., 4] = torch.where(pred[..., 4] >= 0.5, 1, 0)
 
     # detection_objects(x, last_pred)
@@ -147,9 +147,10 @@ class ModelTrainer:
     return losses / len(self.test_loader)
 
   def fit(self):
-    #for x, y in self.train_loader: # отобразить изображение с рамками
-      #detection_objects(x, y)
-      #exit()
+    for x, y in self.train_loader: # отобразить изображение с рамками
+      utils.detection_objects(x, y)
+
+      exit()
 
     for _ep in range(EPOCHS):
       self.model.train()
