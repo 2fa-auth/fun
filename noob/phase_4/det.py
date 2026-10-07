@@ -31,7 +31,6 @@ class SetNoob(data.Dataset):
     return len(self.imgs_list)    
 
   def __getitem__(self, index):
-    target=torch.zeros(7, 7, NUM_BOXES * 5 + NUM_CLASSES)
     image=self.imgs_list[index]
     labels=[]
 
@@ -54,7 +53,8 @@ class SetNoob(data.Dataset):
       image, labels[:, 1:] = self.transforms(image, bbox)
       labels[:, 1:] = utils.norm_coords(bbox, w, h)
     
-    # [class, cx,cy,w,h] -> [cx1,cy1,w1,h1, conf1, cx2,cy2,w2,h2, conf2...N classes]
+    # создание сетки 7x7 
+    target=torch.zeros(7, 7, NUM_BOXES * 5 + NUM_CLASSES)
     class_ids = labels[:, 0].to(torch.int32)
     labels=torch.cat([
       labels,
@@ -64,7 +64,8 @@ class SetNoob(data.Dataset):
       NUM_CLASSES)], dim=1)[:, 1:]
     
     for i, ax in enumerate(labels): ax[10+class_ids[i]] = 1
-    
+
+    # запись в оси X и Y сетки 
     cell_x = torch.floor(labels[:, 0] * W_grid).to(torch.int32) 
     cell_y = torch.floor(labels[:, 1] * H_grid).to(torch.int32)
     target[cell_x, cell_y] = labels
