@@ -9,7 +9,6 @@ __pycache__/
 *.weights
 *.jpg
 *.jpeg
-*.png
 *.txt
 *.mp4
 *.avi
