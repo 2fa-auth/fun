@@ -70,4 +70,4 @@ class BACKBONEModel(nn.Module):
   def forward(self, x): 
     out = self.darknet(x)
     out = self.fcs(out)
-    return out.view(-1, 7, 7, det.NUM_CLASSES)
+    return out.view(-1, 7, 7, det.NUM_CLASSES+10)

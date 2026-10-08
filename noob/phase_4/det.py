@@ -1,23 +1,22 @@
 #!/home/client/Documents/fun/venv/bin/python3
 import os
-from copy import deepcopy
 from PIL import Image 
-from time import sleep
-import math 
-
 import torch
 from torch.optim import Adam
 from torchvision.tv_tensors import BoundingBoxes
 import torch.utils.data as data
 import torchvision.transforms.v2 as v2
 import torch.nn as nn
-
-import cv2
-import numpy as np
-
 import utils
 from model import BACKBONEModel
 
+NUM_CLASSES = 80 
+NUM_BOXES = 2 
+H_image = 448 
+W_image = 448 
+H_grid = 7 
+W_grid = 7 
+EPOCHS = 40
 
 class SetNoob(data.Dataset):
   def __init__(self, pathto_dset, namedset, train=True, transforms=None):
@@ -33,17 +32,15 @@ class SetNoob(data.Dataset):
   def __getitem__(self, index):
     image=self.imgs_list[index]
     labels=[]
-
     # парсинг label*.txt файла
     for label in self.lbs_list:
       if label.split('.')[0] == image.split('.')[0]:
         with open(os.path.join(self.labels, label), "r") as f:
-          ts = f.read().split('\n') # массив содержащий строку из labels
-          # парсинг
+          ts = f.read().split('\n') 
           for t in ts: 
             ar = []
             for val in t.split(' '): 
-              if val != '': ar.append(float(val)) # str -> float 
+              if val != '': ar.append(float(val))
             if ar: labels.append(ar)
     labels = torch.tensor(labels)
     image = Image.open(os.path.join(self.images,image)).convert('RGB')
@@ -52,7 +49,6 @@ class SetNoob(data.Dataset):
       bbox = BoundingBoxes(data=utils.denorm_coords(labels[:, 1:], w, h), format='CXCYWH', canvas_size=(h,w))
       image, labels[:, 1:] = self.transforms(image, bbox)
       labels[:, 1:] = utils.norm_coords(bbox, w, h)
-    
     # создание сетки 7x7 
     target=torch.zeros(7, 7, NUM_BOXES * 5 + NUM_CLASSES)
     class_ids = labels[:, 0].to(torch.int32)
@@ -64,35 +60,26 @@ class SetNoob(data.Dataset):
       NUM_CLASSES)], dim=1)[:, 1:]
     
     for i, ax in enumerate(labels): ax[10+class_ids[i]] = 1
-
     # запись в оси X и Y сетки 
     cell_x = torch.floor(labels[:, 0] * W_grid).to(torch.int32) 
     cell_y = torch.floor(labels[:, 1] * H_grid).to(torch.int32)
     target[cell_x, cell_y] = labels
-
     return image, target
-
 
 class BboxLoss_withMSE:
   def __call__(self, pred, y):
     objectness = y[..., 4].unsqueeze(-1)
     criterion = nn.MSELoss(reduction='none')
-
     present_loss = criterion(pred[..., 4:5], y[..., 4:5]).mean()
-    
     iou_loss = (objectness * (1 - utils.IoU(pred, y))).mean()
-    # class_loss = (present * criterion(pred[..., 1:2], y[..., 1:2])).mean()
+    class_loss = (objectness * criterion(pred[..., 1:2], y[..., 1:2])).mean()
     coords_loss = (objectness * criterion(pred[..., :4], y[..., :4])).mean()
-
-    exit()
     return (present_loss)
 
-
 class ModelTrainer:
-  def __init__(self, model, sets, lr=0.001):
+  def __init__(self, model, train_set, val_set, test_set, lr=0.001):
     self.dev = 'cuda' if torch.cuda.is_available else 'cpu'
     self.model = model.to(self.dev)
-    train_set, val_set, test_set = sets
     self.train_loader = data.DataLoader(dataset=train_set, batch_size=2, shuffle=True)
     self.val_loader = data.DataLoader(dataset=val_set, batch_size=2, shuffle=False)  
     self.test_loader = data.DataLoader(dataset=test_set, batch_size=2, shuffle=False)
@@ -103,16 +90,12 @@ class ModelTrainer:
     losses = 0
     for x, y in self.train_loader:
       x, y = x.to(self.dev), y.to(self.dev)
-      pred = self.model(x).reshape(-1, 10, 85)
-      pred = utils.sort_by_x1(pred)
-
+      pred = self.model(x)
       loss = self.criterion(pred, y)
-      
       self.optimizer.zero_grad()
       loss.backward()
       self.optimizer.step()
       losses += loss.item()
-
     return losses / len(self.train_loader)
 
   def valid(self):
@@ -120,10 +103,8 @@ class ModelTrainer:
     with torch.no_grad():
       for x, y in self.val_loader:
         x, y = x.to(self.dev), y.to(self.dev)
-        pred = self.model(x).reshape(-1, 10, 85)
-        pred = utils.sort_by_x1(pred)
+        pred = self.model(x)
         losses += self.criterion(pred, y).item()
-
     return losses / len(self.val_loader)
   
   def test(self):
@@ -132,27 +113,16 @@ class ModelTrainer:
     with torch.no_grad():
       for x,y in self.test_loader:
         x, y = x.to(self.dev), y.to(self.dev)
-        pred = self.model(x).reshape(-1, 10, 85)
-        pred = utils.sort_by_x1(pred)
+        pred = self.model(x)
         last_pred = pred
         last_y = y
-
-    pred[..., 4] = torch.where(pred[..., 4] >= 0.5, 1, 0)
-
-    # detection_objects(x, last_pred)
-    print(y[0])
-    print(pred[0])
-
     losses += self.criterion(pred, y).item()
-
     return losses / len(self.test_loader)
 
   def fit(self):
-    for x, y in self.train_loader: # отобразить изображение с рамками
-      utils.detection_objects(x, y)
-
-      exit()
-
+    # for x, y in self.train_loader: # отобразить изображение с рамками
+      # utils.detection_objects(x, y)
+      # exit()
     for _ep in range(EPOCHS):
       self.model.train()
       train_meanloss = self.train()
@@ -161,15 +131,9 @@ class ModelTrainer:
       if _ep % 10 == 0: print(f'[{_ep}/{EPOCHS}]\tLOSS TRAIN {train_meanloss}\tLOSS VAL {val_meanloss}')
     self.model.eval()
 
-  def __call__(self): self.fit()
+  def __call__(self): 
+    self.fit()
 
-NUM_CLASSES = 80
-NUM_BOXES = 2
-H_image = 448
-W_image = 448
-H_grid = 7
-W_grid = 7 
-EPOCHS = 40
 
 def main():
   transforms = v2.Compose([
@@ -177,16 +141,11 @@ def main():
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
   ])
-
-  train_set = SetNoob("./", "coco8", train=True, transforms=transforms)
-  val_set = SetNoob("./", "coco8", train=False, transforms=transforms)
-  test_set = SetNoob("./", "coco8", train=True, transforms=transforms)
-
-  # размер предсказания: 7 * 7 * (2 * 5 + 20) = 1470 чисел
-  # каждая из 49 ячеек предсказывает: [cx, cy, w, h, conf1, cx, cy, w, h, conf2] + 20 классов
-  out_fs = 7 * 7 * (NUM_BOXES * 5 + NUM_CLASSES)
-  model = BACKBONEModel(in_chan=3, out_features=out_fs)
-  trainer = ModelTrainer(model, (train_set, val_set, test_set)) ; trainer()
+  trainer = ModelTrainer(
+    model=BACKBONEModel(3, 7*7*(NUM_BOXES*5+NUM_CLASSES)), 
+    train_set=SetNoob("./", "coco8",train=True, transforms=transforms),
+    val_set=SetNoob("./", "coco8",train=False, transforms=transforms),
+    test_set=SetNoob("./", "coco8",train=True, transforms=transforms)); trainer()
 
   print(f'общий показатель ошибки модели: {trainer.test()}')
 
