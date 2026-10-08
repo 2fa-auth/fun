@@ -14,7 +14,7 @@ def IoU(box1, box2):
   y1_box2 = torch.min(box2[...,3:4], box2[..., 5:6]) 
   x2_box2 = torch.max(box2[..., 4:5], box2[..., 2:3])
   y2_box2 = torch.max(box2[..., 5:6], box2[..., 3:4])
-    
+  
   x1_box = torch.max(x1_box1, x1_box2)
   y1_box = torch.max(y1_box1, y1_box2)
   x2_box = torch.min(x2_box1, x2_box2)
@@ -35,20 +35,13 @@ def IoU(box1, box2):
 
 # нормализует координаты
 def denorm_coords(bbox, w, h): return bbox * torch.tensor([w, h, w, h])
+
 # денормализует координаты
 def norm_coords(bbox, w, h): return bbox / torch.tensor([w, h, w, h])
 
-# меняет стиль
+# из x_center, y_center, w, h -> x_min, y_min, x_max, y_max
 def cxcywh_to_xyxy(coords):
-  """
-  переводит стиль координат ИЗ [x_center, y_center, w, h] В [x1, y1, x2, y2]:
-    x1 = x_center - w / 2
-    y1 = y_center - h / 2
-    x2 = x_center + w / 2
-    y2 = y_center + h / 2
-  """
   coords = coords.clone()
-
   x1 = coords[..., 0] - coords[..., 2] / 2
   y1 = coords[..., 1] - coords[..., 3] / 2
   x2 = coords[..., 0] + coords[..., 2] / 2
@@ -66,8 +59,12 @@ def extract_labels(grid): # `grid` должен иметь форму [X_grid, Y
     for preds in ax1: 
       if not preds[9]: continue
       else: tlist.append(preds[:4])
-  
   return torch.stack([t for t in tlist if t.numel() > 0], 0)
+
+def view_image(name_img, img):
+  cv2.imshow(name_img, img)
+  cv2.waitKey(0)
+  cv2.destroyAllWindows()
 
 # отображает изображение с рамками 
 def detection_objects(x, y):
@@ -75,18 +72,16 @@ def detection_objects(x, y):
   bboxes = extract_labels(y[0]).to('cpu')
   bboxes = cxcywh_to_xyxy(bboxes)
   bboxes = denorm_coords(bboxes, det.W_image, det.H_image)
-  image = cv2.cvtColor(img.permute(1, 2, 0).numpy(), cv2.COLOR_RGB2BGR)
+  img = cv2.cvtColor(img.permute(1, 2, 0).numpy(), cv2.COLOR_RGB2BGR)
   
   for bbox in bboxes:  
     x_min = int(bbox[0].item()) 
     y_min = int(bbox[1].item()) 
     x_max = int(bbox[2].item()) 
     y_max = int(bbox[3].item()) 
-    cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
-
-  cv2.imshow('picture from COCO8', image)
-  cv2.waitKey(0)
-  cv2.destroyAllWindows()
+    cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
+    
+  view_image('picture coco8', img)
 
 # сортирует bbox по x1 
 def sort_by_x1(target):
