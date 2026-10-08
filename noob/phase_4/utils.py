@@ -34,12 +34,9 @@ def IoU(box1, box2):
   return intersection_area / (union_area + 1e-6)
 
 # нормализует координаты
-def denorm_coords(bbox, w, h):
-  return bbox * torch.tensor([w, h, w, h])
-
+def denorm_coords(bbox, w, h): return bbox * torch.tensor([w, h, w, h])
 # денормализует координаты
-def norm_coords(bbox, w, h):
-  return bbox / torch.tensor([w, h, w, h])
+def norm_coords(bbox, w, h): return bbox / torch.tensor([w, h, w, h])
 
 # меняет стиль
 def cxcywh_to_xyxy(coords):
@@ -62,35 +59,36 @@ def cxcywh_to_xyxy(coords):
   coords[..., 3] = y2 
   return coords
 
+# извлечение labels из сетки 
+def extract_labels(grid): # `grid` должен иметь форму [X_grid, Y_grid, N_predisions]
+  tlist=[]
+  for ax1 in grid:
+    for preds in ax1: 
+      if not preds[9]: continue
+      else: tlist.append(preds[:4])
+  
+  return torch.stack([t for t in tlist if t.numel() > 0], 0)
+
 # отображает изображение с рамками 
 def detection_objects(x, y):
-  labels = torch.tensor([])
-  for ax1 in y:
-    for ax2 in ax1:
-      for el in ax2:
-        if el[0] != 0: labels = torch.cat([labels, el.unsqueeze(0)], dim=0)
+  img = x[0].to('cpu')
+  bboxes = extract_labels(y[0]).to('cpu')
+  bboxes = cxcywh_to_xyxy(bboxes)
+  bboxes = denorm_coords(bboxes, det.W_image, det.H_image)
+  image = cv2.cvtColor(img.permute(1, 2, 0).numpy(), cv2.COLOR_RGB2BGR)
   
-  for image, target in zip(x, labels):    
-    image = image.to('cpu')
-    target = target.to('cpu')
+  for bbox in bboxes:  
+    x_min = int(bbox[0].item()) 
+    y_min = int(bbox[1].item()) 
+    x_max = int(bbox[2].item()) 
+    y_max = int(bbox[3].item()) 
+    cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
 
-    image = image.permute(1, 2, 0).numpy()
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    det_image = image.copy()
-    target[:4] = cxcywh_to_xyxy(target[:4])
-    target[:4] = denorm_coords(target[:4], det.W_image, det.H_image)
+  cv2.imshow('picture from COCO8', image)
+  cv2.waitKey(0)
+  cv2.destroyAllWindows()
 
-    for i in range(target.size(0)):
-      x1 = int(target[0].item()) 
-      y1 = int(target[1].item()) 
-      x2 = int(target[2].item()) 
-      y2 = int(target[3].item()) 
-
-      cv2.rectangle(det_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
-      cv2.imshow('picture from COCO8', det_image)
-      cv2.waitKey(0)
-      cv2.destroyAllWindows()
-
+# сортирует bbox по x1 
 def sort_by_x1(target):
   indices = torch.argsort(target[..., 0])
   return torch.gather(input=target, dim=1, index=indices.unsqueeze(-1).expand_as(target))
