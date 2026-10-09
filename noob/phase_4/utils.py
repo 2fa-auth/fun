@@ -53,12 +53,12 @@ def cxcywh_to_xyxy(coords):
   return coords
 
 # извлечение labels из сетки 
-def extract_labels(grid): # `grid` должен иметь форму [X_grid, Y_grid, N_predisions]
+def extract_labels(grid, bbox=True): # `grid` должен иметь форму [X_grid, Y_grid, N_predisions]
   tlist=[]
   for ax1 in grid:
-    for preds in ax1: 
+    for preds in ax1:
       if not preds[9]: continue
-      else: tlist.append(preds[:4])
+    else: tlist.append((preds[:4] if bbox else preds))
   return torch.stack([t for t in tlist if t.numel() > 0], 0)
 
 def view_image(name_img, img):

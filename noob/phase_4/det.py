@@ -9,6 +9,7 @@ import torchvision.transforms.v2 as v2
 import torch.nn as nn
 import utils
 from model import BACKBONEModel
+from loss import BboxLoss_withMSE
 
 NUM_CLASSES = 80 
 NUM_BOXES = 2 
@@ -66,15 +67,8 @@ class SetNoob(data.Dataset):
     target[cell_x, cell_y] = labels
     return image, target
 
-class BboxLoss_withMSE:
-  def __call__(self, pred, y):
-    objectness = y[..., 4].unsqueeze(-1)
-    criterion = nn.MSELoss(reduction='none')
-    present_loss = criterion(pred[..., 4:5], y[..., 4:5]).mean()
-    iou_loss = (objectness * (1 - utils.IoU(pred, y))).mean()
-    class_loss = (objectness * criterion(pred[..., 1:2], y[..., 1:2])).mean()
-    coords_loss = (objectness * criterion(pred[..., :4], y[..., :4])).mean()
-    return (present_loss)
+
+
 
 class ModelTrainer:
   def __init__(self, model, train_set, val_set, test_set, lr=0.001):
@@ -83,7 +77,7 @@ class ModelTrainer:
     self.train_loader = data.DataLoader(dataset=train_set, batch_size=2, shuffle=True)
     self.val_loader = data.DataLoader(dataset=val_set, batch_size=2, shuffle=False)  
     self.test_loader = data.DataLoader(dataset=test_set, batch_size=2, shuffle=False)
-    self.criterion = BboxLoss_withMSE()
+    self.criterion = loss.BboxLoss_withMSE()
     self.optimizer = Adam(params=self.model.parameters(), lr=lr)
   
   def train(self):
@@ -120,9 +114,10 @@ class ModelTrainer:
     return losses / len(self.test_loader)
 
   def fit(self):
-    # for x, y in self.train_loader: # отобразить изображение с рамками
+    for x, y in self.train_loader: # отобразить изображение с рамками
+      print(utils.extract_labels(y[0], bbox=False))
       # utils.detection_objects(x, y)
-      # exit()
+      exit()
     for _ep in range(EPOCHS):
       self.model.train()
       train_meanloss = self.train()
