@@ -9,7 +9,6 @@ import torchvision.transforms.v2 as v2
 import torch.nn as nn
 import utils
 from model import BACKBONEModel
-from loss import BboxLoss_withMSE
 
 NUM_CLASSES = 80 
 NUM_BOXES = 2 
@@ -55,10 +54,16 @@ class SetNoob(data.Dataset):
     class_ids = labels[:, 0].to(torch.int32)
     labels=torch.cat([
       labels,
-      torch.zeros_like(labels),
       torch.ones(labels.size(0), 1),
+      torch.zeros_like(labels),
       torch.zeros(labels.size(0),
       NUM_CLASSES)], dim=1)[:, 1:]
+
+    print(labels[0, :5]) # bbox1
+    print(labels[0, 5:10]) # bbox2
+    print(labels[0, 10:90].shape) # classes
+
+    exit()
     
     for i, ax in enumerate(labels): ax[10+class_ids[i]] = 1
     # запись в оси X и Y сетки 
@@ -68,6 +73,19 @@ class SetNoob(data.Dataset):
     return image, target
 
 
+class BboxLoss_withMSE:
+  def __call__(self, pred, y):
+    pred_labels = utils.extract_labels(pred[0], bbox=False)
+    y_labels = utils.extract_labels(pred[1], bbox=False)
+
+    print(pred_labels)
+    print(y_labels)
+
+    print(pred.shape)
+    print(y.shape)
+    exit()
+    
+    pass
 
 
 class ModelTrainer:
@@ -77,7 +95,7 @@ class ModelTrainer:
     self.train_loader = data.DataLoader(dataset=train_set, batch_size=2, shuffle=True)
     self.val_loader = data.DataLoader(dataset=val_set, batch_size=2, shuffle=False)  
     self.test_loader = data.DataLoader(dataset=test_set, batch_size=2, shuffle=False)
-    self.criterion = loss.BboxLoss_withMSE()
+    self.criterion = BboxLoss_withMSE()
     self.optimizer = Adam(params=self.model.parameters(), lr=lr)
   
   def train(self):

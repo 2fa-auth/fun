@@ -57,7 +57,7 @@ def extract_labels(grid, bbox=True): # `grid` должен иметь форму
   tlist=[]
   for ax1 in grid:
     for preds in ax1:
-      if not preds[9]: continue
+      if not preds[4]: continue # 4 index is confidence 
     else: tlist.append((preds[:4] if bbox else preds))
   return torch.stack([t for t in tlist if t.numel() > 0], 0)
 
